@@ -1022,7 +1022,7 @@ namespace SourceGit.Views
                 if (canCherryPick)
                 {
                     var cherryPick = new MenuItem();
-                    cherryPick.Header = App.Text("CommitCM.CherryPickMultiple");
+                    cherryPick.Header = App.ContextMenuText("CommitCM.CherryPickMultiple");
                     cherryPick.Icon = this.CreateMenuIcon("Icons.CherryPick");
                     cherryPick.Click += (_, e) =>
                     {
@@ -1207,7 +1207,7 @@ namespace SourceGit.Views
 
             var createBranch = new MenuItem();
             createBranch.Icon = this.CreateMenuIcon("Icons.Branch.Add");
-            createBranch.Header = App.Text("CreateBranch");
+            createBranch.Header = App.ContextMenuText("CreateBranch");
             createBranch.Tag = OperatingSystem.IsMacOS() ? "⌘+⇧+B" : "Ctrl+Shift+B";
             createBranch.Click += (_, e) =>
             {
@@ -1315,7 +1315,7 @@ namespace SourceGit.Views
                 }
 
                 var cherryPick = new MenuItem();
-                cherryPick.Header = App.Text("CommitCM.CherryPick");
+                cherryPick.Header = App.ContextMenuText("CommitCM.CherryPick");
                 cherryPick.Icon = this.CreateMenuIcon("Icons.CherryPick");
                 cherryPick.Click += async (_, e) =>
                 {
@@ -1325,7 +1325,7 @@ namespace SourceGit.Views
                 menu.Items.Add(cherryPick);
 
                 var revert = new MenuItem();
-                revert.Header = App.Text("CommitCM.Revert");
+                revert.Header = App.ContextMenuText("CommitCM.Revert");
                 revert.Icon = this.CreateMenuIcon("Icons.Undo");
                 revert.Click += (_, e) =>
                 {
@@ -1338,7 +1338,7 @@ namespace SourceGit.Views
                 if (!isHead)
                 {
                     var checkoutCommit = new MenuItem();
-                    checkoutCommit.Header = App.Text("CommitCM.Checkout");
+                    checkoutCommit.Header = App.ContextMenuText("CommitCM.Checkout");
                     checkoutCommit.Icon = this.CreateMenuIcon("Icons.Detached");
                     checkoutCommit.Click += (_, e) =>
                     {
@@ -1352,13 +1352,13 @@ namespace SourceGit.Views
                 if (commit.IsMerged && commit.Parents.Count > 0)
                 {
                     var interactiveRebase = new MenuItem();
-                    interactiveRebase.Header = App.Text("CommitCM.InteractiveRebase");
+                    interactiveRebase.Header = App.ContextMenuText("CommitCM.InteractiveRebase");
                     interactiveRebase.Icon = this.CreateMenuIcon("Icons.InteractiveRebase");
 
                     if (!isHead)
                     {
                         var manually = new MenuItem();
-                        manually.Header = App.Text("CommitCM.InteractiveRebase.Manually", current.Name, target);
+                        manually.Header = App.ContextMenuText("CommitCM.InteractiveRebase.Manually", current.Name, target);
                         manually.Click += async (_, e) =>
                         {
                             await this.ShowDialogAsync(new ViewModels.InteractiveRebase(repo, commit));
@@ -1370,7 +1370,7 @@ namespace SourceGit.Views
                     }
 
                     var reword = new MenuItem();
-                    reword.Header = App.Text("CommitCM.InteractiveRebase.Reword");
+                    reword.Header = App.ContextMenuText("CommitCM.InteractiveRebase.Reword");
                     reword.Icon = this.CreateMenuIcon("Icons.Rename");
                     reword.Click += async (_, e) =>
                     {
@@ -1388,7 +1388,7 @@ namespace SourceGit.Views
                     };
 
                     var squash = new MenuItem();
-                    squash.Header = App.Text("CommitCM.InteractiveRebase.Squash");
+                    squash.Header = App.ContextMenuText("CommitCM.InteractiveRebase.Squash");
                     squash.Icon = this.CreateMenuIcon("Icons.SquashIntoParent");
                     squash.Click += async (_, e) =>
                     {
@@ -1397,7 +1397,7 @@ namespace SourceGit.Views
                     };
 
                     var fixup = new MenuItem();
-                    fixup.Header = App.Text("CommitCM.InteractiveRebase.Fixup");
+                    fixup.Header = App.ContextMenuText("CommitCM.InteractiveRebase.Fixup");
                     fixup.Icon = this.CreateMenuIcon("Icons.Fix");
                     fixup.Click += async (_, e) =>
                     {
@@ -1426,7 +1426,7 @@ namespace SourceGit.Views
                 else
                 {
                     var interactiveRebase = new MenuItem();
-                    interactiveRebase.Header = App.Text("CommitCM.InteractiveRebase.Manually", current.Name, target);
+                    interactiveRebase.Header = App.ContextMenuText("CommitCM.InteractiveRebase.Manually", current.Name, target);
                     interactiveRebase.Icon = this.CreateMenuIcon("Icons.InteractiveRebase");
                     interactiveRebase.Click += async (_, e) =>
                     {
@@ -1664,7 +1664,7 @@ namespace SourceGit.Views
                 var upstream = current.Upstream.Substring(13);
 
                 var fastForward = new MenuItem();
-                fastForward.Header = App.Text("BranchCM.FastForward", upstream);
+                fastForward.Header = App.ContextMenuText("BranchCM.FastForward", upstream);
                 fastForward.Icon = this.CreateMenuIcon("Icons.FastForward");
                 fastForward.IsEnabled = current.Ahead.Count == 0 && current.Behind.Count > 0;
                 fastForward.Click += async (_, e) =>
@@ -1705,7 +1705,7 @@ namespace SourceGit.Views
             submenu.Items.Add(push);
 
             var rename = new MenuItem();
-            rename.Header = App.Text("BranchCM.Rename", current.Name);
+            rename.Header = App.ContextMenuText("BranchCM.Rename", current.Name);
             rename.Icon = this.CreateMenuIcon("Icons.Rename");
             rename.Click += (_, e) =>
             {
@@ -1767,7 +1767,7 @@ namespace SourceGit.Views
                 if (hasNoWorktree)
                 {
                     var checkout = new MenuItem();
-                    checkout.Header = App.Text("BranchCM.Checkout", branch.Name);
+                    checkout.Header = App.ContextMenuText("BranchCM.Checkout", branch.Name);
                     checkout.Icon = this.CreateMenuIcon("Icons.Check");
                     checkout.Click += async (_, e) =>
                     {
@@ -1839,7 +1839,7 @@ namespace SourceGit.Views
             submenu.Items.Add(push);
 
             var rename = new MenuItem();
-            rename.Header = App.Text("BranchCM.Rename", branch.Name);
+            rename.Header = App.ContextMenuText("BranchCM.Rename", branch.Name);
             rename.Icon = this.CreateMenuIcon("Icons.Rename");
             rename.Click += (_, e) =>
             {
@@ -1850,7 +1850,7 @@ namespace SourceGit.Views
             submenu.Items.Add(rename);
 
             var delete = new MenuItem();
-            delete.Header = App.Text("BranchCM.Delete", branch.Name);
+            delete.Header = App.ContextMenuText("BranchCM.Delete", branch.Name);
             delete.Icon = this.CreateMenuIcon("Icons.Clear");
             delete.Click += (_, e) =>
             {
@@ -1923,7 +1923,7 @@ namespace SourceGit.Views
             submenu.Items.Add(new MenuItem() { Header = "-" });
 
             var checkout = new MenuItem();
-            checkout.Header = App.Text("BranchCM.Checkout", name);
+            checkout.Header = App.ContextMenuText("BranchCM.Checkout", name);
             checkout.Icon = this.CreateMenuIcon("Icons.Check");
             checkout.IsEnabled = !repo.IsBare;
             checkout.Click += async (_, e) =>
@@ -1957,7 +1957,7 @@ namespace SourceGit.Views
             submenu.Items.Add(merge);
 
             var delete = new MenuItem();
-            delete.Header = App.Text("BranchCM.Delete", name);
+            delete.Header = App.ContextMenuText("BranchCM.Delete", name);
             delete.Icon = this.CreateMenuIcon("Icons.Clear");
             delete.Click += (_, e) =>
             {

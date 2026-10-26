@@ -318,6 +318,12 @@
 
             <CheckBox Grid.Row="9" Grid.Column="1"
                       Height="32"
+                      Content="{DynamicResource Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology}"
+                      ToolTip.Tip="{DynamicResource Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology.Tip}"
+                      IsChecked="{Binding ExtendContextMenusWithHgTerminology, Mode=TwoWay}"/>
+
+            <CheckBox Grid.Row="9" Grid.Column="1"
+                      Height="32"
                       Content="{DynamicResource Text.Preferences.Appearance.UseNativeWindowFrame}"
                       IsChecked="{Binding UseSystemWindowFrame, Mode=OneTime}"
                       IsVisible="{OnPlatform False, Linux=True}"

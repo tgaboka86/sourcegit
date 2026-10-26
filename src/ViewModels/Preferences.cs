@@ -191,6 +191,12 @@ namespace SourceGit.ViewModels
             set => SetProperty(ref _useAutoHideScrollBars, value);
         }
 
+        public bool ExtendContextMenusWithHgTerminology
+        {
+            get => _extendContextMenusWithHgTerminology;
+            set => SetProperty(ref _extendContextMenusWithHgTerminology, value);
+        }
+
         public bool UseGitHubStyleAvatar
         {
             get => _useGitHubStyleAvatar;
@@ -833,6 +839,7 @@ namespace SourceGit.ViewModels
         private int _workingDirectoryHeadMode = 0;
         private bool _useFixedTabWidth = true;
         private bool _useAutoHideScrollBars = true;
+        private bool _extendContextMenusWithHgTerminology = false;
         private bool _useGitHubStyleAvatar = true;
         private bool _useCompactBranchNamesInGraph = true;
 
