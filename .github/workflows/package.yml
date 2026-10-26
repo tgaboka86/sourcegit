@@ -38,7 +38,9 @@ jobs:
           name: sourcegit.${{ matrix.runtime }}
   osx-app:
     name: Package macOS
-    runs-on: macos-latest
+    # Packaging cross-compiles the tiny setsid helper for the target architecture.
+    # Intel hosts avoid the ARM runner capacity issue seen in the previous release.
+    runs-on: macos-15-intel
     strategy:
       matrix:
         runtime: [osx-x64, osx-arm64]

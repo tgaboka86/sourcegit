@@ -38,7 +38,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
           VERSION: ${{ needs.version.outputs.version }}
-        run: gh release create "$TAG" -t "$VERSION" --notes-from-tag
+        run: gh release create "$TAG" -t "$VERSION" --notes-from-tag --verify-tag --draft
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
@@ -50,3 +50,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: gh release upload "$TAG" packages/*
+      - name: Publish completed release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: gh release edit "$TAG" --draft=false --latest
