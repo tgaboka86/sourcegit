@@ -1,0 +1,57 @@
+name: Release Windows x64
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: release-win-x64
+  cancel-in-progress: false
+jobs:
+  release:
+    name: Build and release Windows x64
+    runs-on: windows-2022
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+          fetch-depth: 0
+      - name: Prepare release version
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid release version' }
+          $tag = "v$version"
+          $existing = gh release list --json tagName --jq ".[].tagName"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not check existing releases' }
+          if ($tag -in $existing) { throw "Release $tag already exists" }
+          "VERSION=$version" >> $env:GITHUB_ENV
+          "TAG=$tag" >> $env:GITHUB_ENV
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Publish Windows x64
+        run: dotnet publish src/SourceGit.csproj -c Release -r win-x64 -o build/SourceGit
+      - name: Package Windows x64
+        shell: pwsh
+        env:
+          RUNTIME: win-x64
+        run: ./build/scripts/package.win.ps1
+      - name: Create draft release with Windows x64 package
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          gh release create "$env:TAG" "build/sourcegit_$env:VERSION.win-x64.zip" --target "$env:RELEASE_COMMIT" --title "$env:VERSION" --generate-notes --draft
+          if ($LASTEXITCODE -ne 0) { throw 'Could not create release' }
+      - name: Publish completed release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "$env:TAG" --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish release' }
