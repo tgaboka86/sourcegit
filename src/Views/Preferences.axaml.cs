@@ -432,14 +432,63 @@ namespace SourceGit.Views
             e.Handled = true;
         }
 
-        private void OnRemoveSelectedOpenAIService(object sender, RoutedEventArgs e)
+        private async void OnRemoveSelectedOpenAIService(object sender, RoutedEventArgs e)
         {
             if (SelectedOpenAIService == null)
                 return;
 
-            ViewModels.Preferences.Instance.OpenAIServices.Remove(SelectedOpenAIService);
+            var server = SelectedOpenAIService.Server;
+            var pref = ViewModels.Preferences.Instance;
+            pref.OpenAIServices.Remove(SelectedOpenAIService);
             SelectedOpenAIService = null;
+
+            var needDeleteApiKey = true;
+            foreach (var s in pref.OpenAIServices)
+            {
+                if (s.Server.Equals(server, StringComparison.Ordinal))
+                {
+                    needDeleteApiKey = false;
+                    break;
+                }
+            }
+
+            if (needDeleteApiKey)
+            {
+                try
+                {
+                    AI.ApiKeyManager.Remove(server);
+                }
+                catch (Exception ex)
+                {
+                    await new Alert().ShowAsync(this, ex.Message, true);
+                }
+            }
+
             e.Handled = true;
+        }
+
+        private async void OnEditApiKey(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button { DataContext: AI.Service service })
+                return;
+
+            try
+            {
+                var apiKey = AI.ApiKeyManager.Get(service.Server) ?? new AI.ApiKey { Service = service.Server };
+                var editKey = apiKey.CreateEditObject();
+
+                var dialog = new EditApiKey(editKey);
+                var ok = await dialog.ShowDialog<bool>(this);
+                if (!ok)
+                    return;
+
+                editKey.PrepareForSaving();
+                AI.ApiKeyManager.AddOrUpdate(editKey);
+            }
+            catch (Exception ex)
+            {
+                await new Alert().ShowAsync(this, ex.Message, true);
+            }
         }
 
         private void OnAddCustomAction(object sender, RoutedEventArgs e)
