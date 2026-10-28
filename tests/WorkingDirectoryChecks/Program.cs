@@ -19,6 +19,13 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args is ["--record-diff", var record, var local, var remote])
+        {
+            File.WriteAllText(record + ".tmp", JsonSerializer.Serialize(new[] { File.ReadAllText(local), File.ReadAllText(remote) }));
+            File.Move(record + ".tmp", record, true);
+            return;
+        }
+
         var fixture = Path.Combine(Path.GetTempPath(), "sourcegit-working-directory-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(fixture);
         SourceGit.Native.OS.BasicDirectories.ConfigDir = fixture;
@@ -52,6 +59,7 @@ internal static class Program
             CheckBranchesColumn(repo, window, fixture);
             CheckBranchContext(repo, window);
             CheckTreeColumn(repo, window, fixture);
+            CheckExternalDiffDoubleClick(repo, window, fixture);
             CheckSelection(repo, window);
             CheckRowHitTesting(repo, window);
             CheckStatusPipeline(repo, fixture);
@@ -74,6 +82,82 @@ internal static class Program
             foreach (var file in Directory.EnumerateFiles(fixture, "*", SearchOption.AllDirectories))
                 File.SetAttributes(file, FileAttributes.Normal);
             Directory.Delete(fixture, true);
+        }
+    }
+
+    private static void CheckExternalDiffDoubleClick(Repository repo, Window window, string fixture)
+    {
+        var previousType = SourceGit.Native.OS.ExternalMergerType;
+        var previousPath = SourceGit.Native.OS.ExternalMergerExecFile;
+        var previousArgs = SourceGit.Native.OS.ExternalDiffArgs;
+        var previousView = repo.SelectedViewIndex;
+        var transcript = Path.Combine(fixture, ".git", "external-diff.json");
+        var configKeys = new[] { "diff.guitool", "merge.guitool", "diff.tool", "merge.tool" };
+        var wc = repo.WorkingCopy;
+        try
+        {
+            foreach (var key in configKeys)
+                Git(fixture, $"config --local {key} \"\"");
+            var executable = Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "WorkingDirectoryChecks.exe" : "WorkingDirectoryChecks");
+            SourceGit.Native.OS.ExternalMergerType = 1;
+            SourceGit.Native.OS.ExternalMergerExecFile = executable;
+            SourceGit.Native.OS.ExternalDiffArgs = $"--record-diff \"{transcript}\" \"$LOCAL\" \"$REMOTE\"";
+            Check(SourceGit.Commands.DiffTool.IsConfigured(fixture), "configured application diff tool is detected");
+            File.WriteAllText(Path.Combine(fixture, "tracked.txt"), "staged\n");
+            Git(fixture, "add tracked.txt");
+            File.WriteAllText(Path.Combine(fixture, "tracked.txt"), "unstaged\n");
+            repo.MarkWorkingCopyDirtyManually();
+            repo.SelectedViewIndex = 1;
+            PumpUntil(() => wc.Unstaged.Count == 1 && wc.Staged.Count == 1 && window.GetVisualDescendants().OfType<Views.WorkingCopy>().Any());
+            var editor = window.GetVisualDescendants().OfType<Views.WorkingCopy>().Single();
+            var unstaged = editor.FindControl<Views.ChangeCollectionView>("UnstagedChangesView");
+            var staged = editor.FindControl<Views.ChangeCollectionView>("StagedChangesView");
+            wc.SelectedUnstaged = new(new List<Change> { wc.Unstaged[0] });
+            Dispatcher.UIThread.RunJobs();
+            unstaged.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Views.ChangeCollectionView.ChangeDoubleTappedEvent));
+            PumpUntil(() => File.Exists(transcript));
+            var comparison = JsonSerializer.Deserialize<string[]>(File.ReadAllText(transcript));
+            Check(comparison.SequenceEqual(new[] { "staged\n", "unstaged\n" }), "unstaged double-click opens the existing index-to-worktree external diff");
+            Check(Git(fixture, "show :tracked.txt") == "staged\n", "external diff does not stage the file");
+            File.Delete(transcript);
+            wc.SelectedStaged = new(new List<Change> { wc.Staged[0] });
+            Dispatcher.UIThread.RunJobs();
+            staged.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Views.ChangeCollectionView.ChangeDoubleTappedEvent));
+            PumpUntil(() => File.Exists(transcript));
+            comparison = JsonSerializer.Deserialize<string[]>(File.ReadAllText(transcript));
+            Check(comparison.SequenceEqual(new[] { "initial\n", "staged\n" }), "staged double-click opens the existing HEAD-to-index external diff");
+            Check(Git(fixture, "show :tracked.txt") == "staged\n", "external diff does not unstage the file");
+            SourceGit.Native.OS.ExternalMergerType = 0;
+            SourceGit.Native.OS.ExternalMergerExecFile = string.Empty;
+            SourceGit.Native.OS.ExternalDiffArgs = string.Empty;
+            Check(!SourceGit.Commands.DiffTool.IsConfigured(fixture), "no configured external diff tool is detected without opening one");
+            wc.SelectedUnstaged = new(new List<Change> { wc.Unstaged[0] });
+            Dispatcher.UIThread.RunJobs();
+            unstaged.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Views.ChangeCollectionView.ChangeDoubleTappedEvent));
+            PumpUntil(() => wc.Unstaged.Count == 0 && wc.Staged.Count == 1);
+            Check(Git(fixture, "show :tracked.txt") == "unstaged\n", "unstaged double-click keeps staging behavior when no diff tool is configured");
+            wc.SelectedStaged = new(new List<Change> { wc.Staged[0] });
+            Dispatcher.UIThread.RunJobs();
+            staged.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Views.ChangeCollectionView.ChangeDoubleTappedEvent));
+            PumpUntil(() => wc.Staged.Count == 0 && wc.Unstaged.Count == 1);
+            Check(Git(fixture, "show :tracked.txt") == "initial\n", "staged double-click keeps unstaging behavior when no diff tool is configured");
+            Git(fixture, "config --local diff.guitool capture");
+            Check(SourceGit.Commands.DiffTool.IsConfigured(fixture), "repository-configured Git diff tools are detected");
+            Git(fixture, "config --local diff.guitool vimdiff");
+            Check(!SourceGit.Commands.DiffTool.IsConfigured(fixture), "unsupported CLI diff tools do not replace staging actions");
+        }
+        finally
+        {
+            SourceGit.Native.OS.ExternalMergerType = previousType;
+            SourceGit.Native.OS.ExternalMergerExecFile = previousPath;
+            SourceGit.Native.OS.ExternalDiffArgs = previousArgs;
+            foreach (var key in configKeys)
+                Git(fixture, $"config --local --unset-all {key}");
+            Git(fixture, "reset -q HEAD -- tracked.txt");
+            File.WriteAllText(Path.Combine(fixture, "tracked.txt"), "edited\n");
+            repo.MarkWorkingCopyDirtyManually();
+            repo.SelectedViewIndex = previousView;
+            PumpUntil(() => wc.Staged.Count == 0 && wc.Unstaged.Count == 1);
         }
     }
 
@@ -812,12 +896,13 @@ internal static class Program
         _checks++;
     }
 
-    private static void Git(string path, string args)
+    private static string Git(string path, string args)
     {
         using var process = Process.Start(new ProcessStartInfo("git", args) { WorkingDirectory = path,
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true });
         process.WaitForExit();
         if (process.ExitCode != 0)
             throw new Exception(process.StandardError.ReadToEnd());
+        return process.StandardOutput.ReadToEnd();
     }
 }

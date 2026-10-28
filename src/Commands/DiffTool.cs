@@ -12,6 +12,24 @@ namespace SourceGit.Commands
             _option = option;
         }
 
+        public static bool IsConfigured(string repo)
+        {
+            var tool = Native.OS.GetDiffMergeTool(true);
+            if (tool == null)
+                return false;
+            if (!string.IsNullOrEmpty(tool.Cmd))
+                return true;
+
+            var config = new Config(repo).ReadAll();
+            foreach (var key in new[] { "diff.guitool", "merge.guitool", "diff.tool", "merge.tool" })
+            {
+                if (config.TryGetValue(key, out var name))
+                    return !string.IsNullOrWhiteSpace(name) && !IsCLIBasedTool(name);
+            }
+
+            return false;
+        }
+
         public void Open()
         {
             var tool = Native.OS.GetDiffMergeTool(true);
@@ -62,8 +80,7 @@ namespace SourceGit.Commands
 
         private bool CheckCLIBasedTool(string tool)
         {
-            if (tool.StartsWith("vimdiff", StringComparison.Ordinal) ||
-                tool.StartsWith("nvimdiff", StringComparison.Ordinal))
+            if (IsCLIBasedTool(tool))
             {
                 RaiseException($"CLI based diff tool \"{tool}\" is not supported by this app!");
                 return false;
@@ -71,6 +88,9 @@ namespace SourceGit.Commands
 
             return true;
         }
+
+        private static bool IsCLIBasedTool(string tool) =>
+            tool.StartsWith("vimdiff", StringComparison.Ordinal) || tool.StartsWith("nvimdiff", StringComparison.Ordinal);
 
         private Models.DiffOption _option;
     }

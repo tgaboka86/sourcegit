@@ -64,6 +64,14 @@ namespace SourceGit.Views
         {
             if (DataContext is ViewModels.WorkingCopy { SelectedUnstaged: { Count: > 0 } selection } vm)
             {
+                if (selection is { Count: 1, HasFolder: false } && !selection.Changes[0].IsConflicted &&
+                    Commands.DiffTool.IsConfigured(vm.Repository.FullPath))
+                {
+                    vm.UseExternalDiffTool(selection.Changes[0], true);
+                    e.Handled = true;
+                    return;
+                }
+
                 var next = UnstagedChangesView.GetNextChangeWithoutSelection();
                 await vm.StageChangesAsync(selection.Changes, next);
                 UnstagedChangesView.TakeFocus();
@@ -75,6 +83,14 @@ namespace SourceGit.Views
         {
             if (DataContext is ViewModels.WorkingCopy { SelectedStaged: { Count: > 0 } selection } vm)
             {
+                if (selection is { Count: 1, HasFolder: false } &&
+                    Commands.DiffTool.IsConfigured(vm.Repository.FullPath))
+                {
+                    vm.UseExternalDiffTool(selection.Changes[0], false);
+                    e.Handled = true;
+                    return;
+                }
+
                 var next = StagedChangesView.GetNextChangeWithoutSelection();
                 await vm.UnstageChangesAsync(selection.Changes, next);
                 StagedChangesView.TakeFocus();
