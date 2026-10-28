@@ -521,6 +521,13 @@ namespace SourceGit.Views
                     order.Add(i);
             }
 
+            // Older saved orders have no TREE column. Keep the other source-column indexes stable.
+            if (vm.ColumnOrder == null || !vm.ColumnOrder.Contains(6))
+            {
+                order.Remove(6);
+                order.Insert(order.IndexOf(0), 6);
+            }
+
             _restoringColumnOrder = true;
             try
             {
@@ -812,6 +819,16 @@ namespace SourceGit.Views
                 ev.Handled = true;
             };
 
+            var treeColumn = new MenuItem();
+            treeColumn.Header = App.Text("Histories.Header.Tree");
+            if (histories.IsTreeColumnVisible)
+                treeColumn.Icon = this.CreateMenuIcon("Icons.Check");
+            treeColumn.Click += (_, ev) =>
+            {
+                histories.IsTreeColumnVisible = !histories.IsTreeColumnVisible;
+                ev.Handled = true;
+            };
+
             var authorColumn = new MenuItem();
             authorColumn.Header = App.Text("Histories.Header.Author");
             if (histories.IsAuthorColumnVisible)
@@ -876,6 +893,7 @@ namespace SourceGit.Views
             menu.Items.Add(new MenuItem() { Header = "-" });
             menu.Items.Add(columnsHeader);
             menu.Items.Add(branchesColumn);
+            menu.Items.Add(treeColumn);
             menu.Items.Add(authorColumn);
             menu.Items.Add(shaColumn);
             menu.Items.Add(authorTimeColumn);
@@ -895,11 +913,21 @@ namespace SourceGit.Views
 
             double rowHeight = dataGrid.RowHeight;
             double startY = 0;
+            // The header must not add space beyond the visible graph lanes.
+            double treeWidth = 0;
             foreach (var child in rowsPresenter.Children)
             {
                 if (child is DataGridRow { IsVisible: true } row)
                 {
                     rowHeight = row.Bounds.Height;
+
+                    if (row.Bounds.Bottom > 0 && row.Bounds.Top < rowsPresenter.Bounds.Height)
+                    {
+                        if (row.DataContext is Models.Commit commit)
+                            treeWidth = Math.Max(treeWidth, commit.LeftMargin + 4);
+                        else if (row.DataContext is ViewModels.WorkingDirectoryEntry workingDirectory)
+                            treeWidth = Math.Max(treeWidth, workingDirectory.LeftMargin + 4);
+                    }
 
                     if (row.Bounds.Top <= 0 && row.Bounds.Top > -rowHeight)
                     {
@@ -912,7 +940,10 @@ namespace SourceGit.Views
 
             IsScrollToTopVisible = startY >= rowHeight;
 
-            var graphColumn = dataGrid.Columns[0];
+            var separateTree = DataContext is ViewModels.Histories { IsTreeColumnVisible: true };
+            var graphColumn = dataGrid.Columns[separateTree ? 6 : 0];
+            if (separateTree && Math.Abs(graphColumn.Width.Value - treeWidth) > 0.01)
+                graphColumn.Width = new(treeWidth, DataGridLengthUnitType.Pixel);
             double graphOffset = 0;
             foreach (var column in dataGrid.Columns)
             {

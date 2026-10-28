@@ -51,6 +51,19 @@ namespace SourceGit.ViewModels
             }
         }
 
+        public bool IsTreeColumnVisible
+        {
+            get => _repo.UIStates.IsTreeColumnVisibleInHistory;
+            set
+            {
+                if (_repo.UIStates.IsTreeColumnVisibleInHistory != value)
+                {
+                    _repo.UIStates.IsTreeColumnVisibleInHistory = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         public bool IsBranchesColumnVisible
         {
             get => _repo.UIStates.IsBranchesColumnVisibleInHistory;

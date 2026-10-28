@@ -84,6 +84,16 @@
 
           </Style>
 
+          <Style Selector="Border.history_message" x:DataType="m:Commit">
+            <Setter Property="Padding" Value="{Binding LeftMargin, Converter={x:Static c:DoubleConverters.ToLeftMargin}}"/>
+          </Style>
+          <Style Selector="Border.history_working_directory" x:DataType="vm:WorkingDirectoryEntry">
+            <Setter Property="Padding" Value="{Binding LeftMargin, Converter={x:Static c:DoubleConverters.ToLeftMargin}}"/>
+          </Style>
+          <Style Selector="Border.separate_tree">
+            <Setter Property="Padding" Value="0"/>
+          </Style>
+
           <Style Selector="DataGridCell">
             <Setter Property="Template">
               <ControlTemplate>
@@ -103,7 +113,12 @@
         <DataGrid.Columns>
           <DataGridTemplateColumn Width="*" MinWidth="180" IsReadOnly="True">
             <DataGridTemplateColumn.Header>
-              <TextBlock Classes="table_header" Text="{DynamicResource Text.Histories.Header.GraphAndSubject}" HorizontalAlignment="Center"/>
+              <Grid>
+                <TextBlock Classes="table_header" Text="{DynamicResource Text.Histories.Header.GraphAndSubject}" HorizontalAlignment="Center"
+                           IsVisible="{Binding !IsTreeColumnVisible}"/>
+                <TextBlock Classes="table_header" Text="{DynamicResource Text.Histories.Header.Subject}" HorizontalAlignment="Center"
+                           IsVisible="{Binding IsTreeColumnVisible}"/>
+              </Grid>
             </DataGridTemplateColumn.Header>
 
             <DataGridTemplateColumn.CellTemplate>
@@ -111,7 +126,9 @@
                 <ContentControl Content="{Binding}" HorizontalContentAlignment="Stretch">
                   <ContentControl.DataTemplates>
                     <DataTemplate DataType="m:Commit">
-                      <Border Padding="{Binding LeftMargin, Converter={x:Static c:DoubleConverters.ToLeftMargin}}" ClipToBounds="True" Background="Transparent">
+                      <Border Classes="history_message"
+                              Classes.separate_tree="{Binding $parent[v:Histories].((vm:Histories)DataContext).IsTreeColumnVisible}"
+                              ClipToBounds="True" Background="Transparent">
                         <Grid ColumnDefinitions="Auto,Auto,*" Margin="2,0,4,0" ClipToBounds="True">
                           <v:CommitStatusIndicator Grid.Column="0"
                                                    CurrentBranch="{Binding $parent[v:Histories].CurrentBranch}"
@@ -155,7 +172,9 @@
                       </Border>
                     </DataTemplate>
                     <DataTemplate DataType="vm:WorkingDirectoryEntry">
-                      <Border Padding="{Binding LeftMargin, Converter={x:Static c:DoubleConverters.ToLeftMargin}}" ClipToBounds="True" ToolTip.Tip="{DynamicResource Text.Histories.WorkingDirectory}" AutomationProperties.Name="{DynamicResource Text.Histories.WorkingDirectory}">
+                      <Border Classes="history_working_directory"
+                              Classes.separate_tree="{Binding $parent[v:Histories].((vm:Histories)DataContext).IsTreeColumnVisible}"
+                              ClipToBounds="True" ToolTip.Tip="{DynamicResource Text.Histories.WorkingDirectory}" AutomationProperties.Name="{DynamicResource Text.Histories.WorkingDirectory}">
                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,4,0">
                           <TextBlock Text="{Binding Summary}" VerticalAlignment="Center"/>
                           <StackPanel Orientation="Horizontal" Spacing="4">
@@ -326,6 +345,23 @@
                     </DataTemplate>
                   </ContentControl.DataTemplates>
                 </ContentControl>
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <!-- Preserve saved source-column indexes; display TREE before the messages by default. -->
+          <DataGridTemplateColumn Width="0" MinWidth="0"
+                                  IsReadOnly="True"
+                                  IsVisible="{Binding IsTreeColumnVisible, Mode=OneWay}">
+            <DataGridTemplateColumn.Header>
+              <Canvas Height="24" ClipToBounds="True">
+                <Border Height="24">
+                  <TextBlock Classes="table_header" Text="{DynamicResource Text.Histories.Header.Tree}" VerticalAlignment="Center"/>
+                </Border>
+              </Canvas>
+            </DataGridTemplateColumn.Header>
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate>
+                <Border Background="Transparent"/>
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>

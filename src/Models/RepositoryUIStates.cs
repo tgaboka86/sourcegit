@@ -19,6 +19,12 @@ namespace SourceGit.Models
 
         public double BranchesColumnWidth { get; set; } = 180;
 
+        public bool IsTreeColumnVisibleInHistory
+        {
+            get;
+            set;
+        } = false;
+
         public bool IsAuthorColumnVisibleInHistory
         {
             get;

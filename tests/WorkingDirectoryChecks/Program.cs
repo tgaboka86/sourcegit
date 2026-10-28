@@ -51,6 +51,7 @@ internal static class Program
             PumpUntil(() => !repo.Histories.IsLoading && repo.LocalChangesCount == 1);
             CheckBranchesColumn(repo, window, fixture);
             CheckBranchHover(repo, window);
+            CheckTreeColumn(repo, window, fixture);
             CheckSelection(repo, window);
             CheckRowHitTesting(repo, window);
             CheckStatusPipeline(repo, fixture);
@@ -224,8 +225,8 @@ internal static class Program
         var message = list.GetVisualDescendants().OfType<Views.CommitMessagePanel>().Single();
         Check(!message.RefsAfterSubject && message.Children[0].Bounds.Right <= message.Children[1].Bounds.Left,
             "message refs precede the subject when the branch column is hidden");
-        Check(list.Columns.OrderBy(x => x.DisplayIndex).Select(x => list.Columns.IndexOf(x)).SequenceEqual(new[] { 5, 2, 0, 1, 3, 4 }),
-            "new branch column precedes existing saved column order without changing source indexes");
+        Check(list.Columns.OrderBy(x => x.DisplayIndex).Select(x => list.Columns.IndexOf(x)).SequenceEqual(new[] { 5, 2, 6, 0, 1, 3, 4 }),
+            "new branch and tree columns preserve existing saved source-column indexes");
         var graph = window.GetVisualDescendants().OfType<Views.CommitGraph>().Single();
         vm.IsBranchesColumnVisible = true;
         PumpUntil(() => column.IsVisible && column.ActualWidth > 0 && graph.Margin.Left >= column.ActualWidth);
@@ -343,6 +344,59 @@ internal static class Program
         // Leave the remaining interaction checks in their usual column order.
         for (var i = 0; i < 5; i++)
             list.Columns[i].DisplayIndex = i + 1;
+    }
+
+    private static void CheckTreeColumn(Repository repo, Window window, string fixture)
+    {
+        var vm = repo.Histories;
+        var list = window.GetVisualDescendants().OfType<Views.HistoriesCommitList>().Single();
+        var graph = window.GetVisualDescendants().OfType<Views.CommitGraph>().Single();
+        var tree = list.Columns[6];
+        var originalOrder = list.Columns.OrderBy(x => x.DisplayIndex).ToArray();
+        var commit = vm.Commits[0];
+        var originalMargin = commit.LeftMargin;
+        Check(!vm.IsTreeColumnVisible && !tree.IsVisible, "tree column is opt-in");
+        try
+        {
+            vm.IsTreeColumnVisible = true;
+            PumpUntil(() => tree.IsVisible && tree.ActualWidth > 0);
+            var content = list.GetVisualDescendants().OfType<Border>()
+                .Where(x => x.Classes.Contains("history_message") || x.Classes.Contains("history_working_directory")).ToArray();
+            Check(content.Any(x => x.DataContext is WorkingDirectoryEntry) && content.Any(x => x.DataContext is Commit),
+                "tree mode retains working-directory and commit message rows");
+            Check(content.All(x => x.Padding.Left == 0), "tree mode aligns working-directory and commit message rows");
+            var expectedWidth = Math.Max(commit.LeftMargin, vm.WorkingDirectory.LeftMargin) + 4;
+            PumpUntil(() => Math.Abs(tree.ActualWidth - expectedWidth) < 0.01);
+            Check(tree.ActualWidth < 48, "tree header and tools do not impose a minimum graph width");
+
+            commit.LeftMargin = originalMargin + 200;
+            list.InvalidateMeasure();
+            PumpUntil(() => tree.ActualWidth >= commit.LeftMargin + 4);
+            commit.LeftMargin = originalMargin;
+            list.InvalidateMeasure();
+            PumpUntil(() => Math.Abs(tree.ActualWidth - expectedWidth) < 0.01);
+            Check(tree.ActualWidth < 48, "tree automatically shrinks after the visible lanes narrow");
+
+            tree.DisplayIndex = list.Columns.Count - 1;
+            var offset = list.Columns.Where(x => x.IsVisible && x.DisplayIndex < tree.DisplayIndex).Sum(x => x.ActualWidth);
+            PumpUntil(() => Math.Abs(graph.Margin.Left - offset) < 0.01);
+            Check(graph.Layout.ClipWidth == Math.Max(0, tree.ActualWidth - 4), "graph follows the reordered tree column and clips to its width");
+            repo.UIStates.Save();
+            Check(RepositoryUIStates.Load(Path.Combine(fixture, ".git")).IsTreeColumnVisibleInHistory,
+                "tree visibility persists per repository");
+        }
+        finally
+        {
+            commit.LeftMargin = originalMargin;
+            vm.IsTreeColumnVisible = false;
+            for (var i = 0; i < originalOrder.Length; i++)
+                originalOrder[i].DisplayIndex = i;
+            PumpUntil(() => !tree.IsVisible);
+        }
+        var restored = list.GetVisualDescendants().OfType<Border>()
+            .Where(x => x.Classes.Contains("history_message") || x.Classes.Contains("history_working_directory"));
+        Check(restored.All(x => x.Padding.Left == (x.DataContext is Commit c ? c.LeftMargin : vm.WorkingDirectory.LeftMargin)),
+            "hiding tree restores graph indentation for both row types");
     }
 
     private static void CheckHeadPreference(string fixture)
