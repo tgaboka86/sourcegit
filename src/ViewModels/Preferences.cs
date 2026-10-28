@@ -230,7 +230,21 @@ namespace SourceGit.ViewModels
         public bool UseTwoColumnsLayoutInHistories
         {
             get => _useTwoColumnsLayoutInHistories;
-            set => SetProperty(ref _useTwoColumnsLayoutInHistories, value);
+            set
+            {
+                if (SetProperty(ref _useTwoColumnsLayoutInHistories, value) && value)
+                    UseWideDetailsLayoutInHistories = false;
+            }
+        }
+
+        public bool UseWideDetailsLayoutInHistories
+        {
+            get => _useWideDetailsLayoutInHistories;
+            set
+            {
+                if (SetProperty(ref _useWideDetailsLayoutInHistories, value) && value)
+                    UseTwoColumnsLayoutInHistories = false;
+            }
         }
 
         public bool DisplayTimeAsPeriodInHistories
@@ -831,6 +845,7 @@ namespace SourceGit.ViewModels
 
         private bool _showTagsInGraph = true;
         private bool _useTwoColumnsLayoutInHistories = false;
+        private bool _useWideDetailsLayoutInHistories = false;
         private bool _displayTimeAsPeriodInHistories = false;
         private bool _useSideBySideDiff = false;
         private bool _ignoreWhitespaceChangesInDiff = false;
