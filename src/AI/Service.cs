@@ -7,7 +7,6 @@ using System.Text.Json.Serialization;
 using Azure.AI.OpenAI;
 using CommunityToolkit.Mvvm.ComponentModel;
 using OpenAI;
-using OpenAI.Chat;
 
 namespace SourceGit.AI
 {
@@ -36,22 +35,50 @@ namespace SourceGit.AI
         }
 
         [JsonIgnore]
-        public List<string> AvailableModels
+        public string CachedApiKey
         {
             get;
-            private set;
+            set;
+        } = string.Empty;
+
+        [JsonIgnore]
+        public List<string> CachedAvailableModels
+        {
+            get;
+            set;
         } = [];
 
         public string Model
         {
             get => _model;
-            set => SetProperty(ref _model, value);
+            set
+            {
+                if (SetProperty(ref _model, value))
+                {
+                    if (!_autoFetchAvailableModels)
+                    {
+                        if (string.IsNullOrEmpty(value))
+                            CachedAvailableModels = [];
+                        else
+                            CachedAvailableModels = [_model];
+                    }
+                }
+            }
         }
 
         public bool AutoFetchAvailableModels
         {
             get => _autoFetchAvailableModels;
-            set => SetProperty(ref _autoFetchAvailableModels, value);
+            set
+            {
+                if (SetProperty(ref _autoFetchAvailableModels, value))
+                {
+                    if (!value && !string.IsNullOrEmpty(_model))
+                        CachedAvailableModels = [_model];
+                    else
+                        CachedAvailableModels = [];
+                }
+            }
         }
 
         public string ReasoningEffortLevel
@@ -72,33 +99,12 @@ namespace SourceGit.AI
             set;
         } = string.Empty;
 
-        public void FetchAvailableModels()
+        public OpenAIClient GetOpenAIClient()
         {
-            if (!_autoFetchAvailableModels)
-            {
-                if (!string.IsNullOrEmpty(Model))
-                    AvailableModels = [Model];
-                return;
-            }
+            if (string.IsNullOrEmpty(CachedApiKey))
+                CachedApiKey = ApiKeyManager.Get(Server)?.GetRawApiKey() ?? string.Empty;
 
-            var allModels = GetOpenAIClient().GetOpenAIModelClient().GetModels();
-            AvailableModels = new List<string>();
-            foreach (var model in allModels.Value)
-                AvailableModels.Add(model.Id);
-
-            if (AvailableModels.Count > 0 && (string.IsNullOrEmpty(Model) || !AvailableModels.Contains(Model)))
-                Model = AvailableModels[0];
-        }
-
-        public ChatClient GetChatClient()
-        {
-            return !string.IsNullOrEmpty(Model) ? GetOpenAIClient().GetChatClient(Model) : null;
-        }
-
-        private OpenAIClient GetOpenAIClient()
-        {
-            var credential = ApiKeyManager.Get(Server)?.ToCredential() ?? new ApiKeyCredential(string.Empty);
-
+            var credential = new ApiKeyCredential(CachedApiKey);
             if (Server.Contains("openai.azure.com/", StringComparison.Ordinal))
             {
                 if (string.IsNullOrEmpty(ExtraHeaders))
