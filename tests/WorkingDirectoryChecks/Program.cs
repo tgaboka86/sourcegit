@@ -50,7 +50,7 @@ internal static class Program
             window.Show();
             PumpUntil(() => !repo.Histories.IsLoading && repo.LocalChangesCount == 1);
             CheckBranchesColumn(repo, window, fixture);
-            CheckBranchHover(repo, window);
+            CheckBranchContext(repo, window);
             CheckTreeColumn(repo, window, fixture);
             CheckSelection(repo, window);
             CheckRowHitTesting(repo, window);
@@ -149,7 +149,7 @@ internal static class Program
         Check(root.GraphBranches.Count == 0, "graph regeneration clears branch context when no known branch reaches a commit");
     }
 
-    private static void CheckBranchHover(Repository repo, Window window)
+    private static void CheckBranchContext(Repository repo, Window window)
     {
         var vm = repo.Histories;
         var original = vm.Commits;
@@ -165,14 +165,11 @@ internal static class Program
             var row = list.GetVisualDescendants().OfType<DataGridRow>().Single(x => ReferenceEquals(x.DataContext, ancestor));
             var cell = row.GetVisualDescendants().OfType<Border>().Single(x => x.Child is Views.CommitRefsPresenter { ShowBranchSummary: true });
             var label = (Views.CommitRefsPresenter)cell.Child;
-            Check(label.BranchSummaryRight == 0 && label.BranchSummaryRefs == null, "unlabeled branch cell is blank before hover");
-            var pointer = new Pointer(8, PointerType.Mouse, true);
-            var position = cell.TranslatePoint(new Point(10, 10), window).Value;
-            cell.RaiseEvent(new PointerEventArgs(InputElement.PointerEnteredEvent, cell, pointer, window, position, 0,
-                new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.Other), KeyModifiers.None));
+            Check(label.BranchSummaryRight == 0 && !label.IsContextBranchSummary, "unlabeled branch cell is blank before hover");
+            list.SelectedItem = ancestor;
             PumpUntil(() => label.BranchSummaryText == "main");
             Check(label.Opacity == 0.7 && label.BranchSummaryHasRemote && label.BranchSummaryAdditionalCount == 0,
-                "hover shows a grouped branch badge at 70 percent opacity");
+                "selected row shows a grouped branch badge at 70 percent opacity");
             Check(label.DecoratorAt(new Point(4, 4))?.Type == DecoratorType.LocalBranchHead, "ancestor hover badge does not claim to be HEAD");
             var connections = window.GetVisualDescendants().OfType<Views.CommitBranchConnections>().Single();
             var graph = window.GetVisualDescendants().OfType<Views.CommitGraph>().Single();
@@ -181,20 +178,18 @@ internal static class Program
             Check(!connections.Connections.Any(x => x.End.Y == ancestorY), "hover badges do not draw connecting lines");
             Check(ToolTip.GetTip(cell) as string == "main\norigin/main", "hover tooltip includes all full branch names");
             Check(ancestor.Decorators.Count == 0, "hover does not add fake branch refs to the commit");
-            cell.RaiseEvent(new PointerEventArgs(InputElement.PointerExitedEvent, cell, pointer, window, position, 0,
-                new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.Other), KeyModifiers.None));
+            list.SelectedItem = tip;
             PumpUntil(() => label.BranchSummaryRight == 0);
-            Check(label.BranchSummaryRefs == null && label.Opacity == 1 && ToolTip.GetTip(cell) == null, "leaving the branch cell removes the hover badge and tooltip");
+            Check(!label.IsContextBranchSummary && label.Opacity == 1 && ToolTip.GetTip(cell) == null, "deselecting the unhovered row removes its branch badge and tooltip");
             var tipRow = list.GetVisualDescendants().OfType<DataGridRow>().Single(x => ReferenceEquals(x.DataContext, tip));
             var tipCell = tipRow.GetVisualDescendants().OfType<Border>().Single(x => x.Child is Views.CommitRefsPresenter { ShowBranchSummary: true });
-            tipCell.RaiseEvent(new PointerEventArgs(InputElement.PointerEnteredEvent, tipCell, pointer, window, position, 0,
-                new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.Other), KeyModifiers.None));
             var tipLabel = (Views.CommitRefsPresenter)tipCell.Child;
-            Check(tipLabel.Opacity == 1 && tipLabel.BranchSummaryRefs == null, "existing branch tip labels stay opaque on hover");
-            label.BranchSummaryRefs = ancestor.GraphBranches;
-            label.Opacity = 0.7;
+            Check(tipLabel.Opacity == 1 && !tipLabel.IsContextBranchSummary, "existing branch tip labels stay opaque on hover");
+            label.ShowBranchContext = true;
+            label.Measure(new Size(180, 26));
             label.DataContext = tip;
-            Check(label.BranchSummaryRefs == null && label.Opacity == 1, "recycled cells clear hover state when their commit changes");
+            label.Measure(new Size(180, 26));
+            Check(!label.IsContextBranchSummary && label.Opacity == 1, "recycled cells clear hover state when their commit changes");
         }
         finally
         {
