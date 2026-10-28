@@ -51,6 +51,19 @@ namespace SourceGit.ViewModels
             }
         }
 
+        public bool IsBranchesColumnVisible
+        {
+            get => _repo.UIStates.IsBranchesColumnVisibleInHistory;
+            set
+            {
+                if (_repo.UIStates.IsBranchesColumnVisibleInHistory != value)
+                {
+                    _repo.UIStates.IsBranchesColumnVisibleInHistory = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         public bool IsAuthorColumnVisible
         {
             get => _repo.UIStates.IsAuthorColumnVisibleInHistory;
@@ -257,7 +270,11 @@ namespace SourceGit.ViewModels
         public Models.Branch CurrentBranch
         {
             get => _currentBranch;
-            set => SetProperty(ref _currentBranch, value);
+            set
+            {
+                if (SetProperty(ref _currentBranch, value))
+                    WorkingDirectory.SetBranch(value, WorkingDirectory.BranchBrush);
+            }
         }
 
         public bool HasSingleRemote
@@ -303,6 +320,12 @@ namespace SourceGit.ViewModels
         {
             get => _repo.UIStates.HistoryColumnOrder;
             set => _repo.UIStates.HistoryColumnOrder = value;
+        }
+
+        public double BranchesColumnWidth
+        {
+            get => _repo.UIStates.BranchesColumnWidth;
+            set => _repo.UIStates.BranchesColumnWidth = value;
         }
 
         public double AuthorColumnWidth
@@ -709,7 +732,10 @@ namespace SourceGit.ViewModels
 
             var graph = Models.CommitGraph.Generate(commits, firstParentOnly, highlighting, extraHeads, IsWorkingDirectoryVisible, Preferences.Instance.WorkingDirectoryHeadMode != 0);
             if (IsWorkingDirectoryVisible)
+            {
                 WorkingDirectory.LeftMargin = graph.Dots[0].Center.X + 14;
+                WorkingDirectory.SetBranch(CurrentBranch, Models.CommitGraph.Pens[graph.Dots[0].Color].Brush);
+            }
             Graph = graph;
         }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace SourceGit.ViewModels
@@ -13,6 +14,18 @@ namespace SourceGit.ViewModels
         public int Added { get => _added; private set => SetProperty(ref _added, value); }
         public int Deleted { get => _deleted; private set => SetProperty(ref _deleted, value); }
         public bool HasChanges => Modified + Added + Deleted > 0;
+        public Models.Decorator Branch { get => _branch; private set => SetProperty(ref _branch, value); }
+        public IBrush BranchBrush { get => _branchBrush; private set => SetProperty(ref _branchBrush, value); }
+
+        public void SetBranch(Models.Branch branch, IBrush brush)
+        {
+            Branch = branch is { IsDetachedHead: false } ? new Models.Decorator
+            {
+                Name = branch.Name,
+                Type = Models.DecoratorType.LocalBranchHead,
+            } : null;
+            BranchBrush = brush;
+        }
 
         public void SetChanges(List<Models.Change> changes)
         {
@@ -49,5 +62,7 @@ namespace SourceGit.ViewModels
         private int _modified;
         private int _added;
         private int _deleted;
+        private Models.Decorator _branch;
+        private IBrush _branchBrush = Brushes.Gray;
     }
 }

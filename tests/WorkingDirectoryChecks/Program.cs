@@ -32,19 +32,25 @@ internal static class Program
             Preferences.Instance.WorkingDirectoryHeadMode = 1;
             CheckClassification();
             CheckGraph();
+            CheckBranchSummaryRendering();
+            CheckGraphBranchContext();
             Git(fixture, "init -b main");
             Git(fixture, "config user.name Test");
             Git(fixture, "config user.email test@example.com");
             File.WriteAllText(Path.Combine(fixture, "tracked.txt"), "initial\n");
             Git(fixture, "add tracked.txt");
             Git(fixture, "commit -m initial");
+            Git(fixture, "tag v1");
             File.WriteAllText(Path.Combine(fixture, "tracked.txt"), "edited\n");
             repo = new Repository(false, fixture, Path.Combine(fixture, ".git"));
+            repo.UIStates.HistoryColumnOrder = [2, 0, 1, 3, 4];
             repo.Open();
             window = new Window { Title = "SourceGit Working Directory Checks", Width = 1100, Height = 800,
                 Content = new Views.Repository { DataContext = repo } };
             window.Show();
             PumpUntil(() => !repo.Histories.IsLoading && repo.LocalChangesCount == 1);
+            CheckBranchesColumn(repo, window, fixture);
+            CheckBranchHover(repo, window);
             CheckSelection(repo, window);
             CheckRowHitTesting(repo, window);
             CheckStatusPipeline(repo, fixture);
@@ -68,6 +74,275 @@ internal static class Program
                 File.SetAttributes(file, FileAttributes.Normal);
             Directory.Delete(fixture, true);
         }
+    }
+
+    private static void CheckBranchSummaryRendering()
+    {
+        var commit = new Commit();
+        commit.ParseDecorators("HEAD -> refs/heads/main, refs/remotes/origin/main, tag: refs/tags/v1");
+        var label = new Views.CommitRefsPresenter { ShowBranchSummary = true, FontSize = 12, DataContext = commit };
+        label.Measure(new Size(double.PositiveInfinity, 26));
+        Check(label.BranchSummaryHasRemote && label.BranchSummaryText == "main", "matching local and remote use one local badge with both icons");
+        Check(label.BranchSummaryAdditionalCount == 0 && label.BranchSummarySuffixWidth == 0, "matching local and remote count as one label");
+        Check(Math.Abs(label.DesiredSize.Width - label.BranchSummaryRight - 1.5) <= 1,
+            "single summary badge reserves no count space or multi-label gutter");
+        var pairedWidth = label.BranchSummaryRight;
+        var local = new Commit();
+        local.ParseDecorators("HEAD -> refs/heads/main");
+        label.DataContext = local;
+        label.Measure(new Size(double.PositiveInfinity, 26));
+        Check(Math.Abs(pairedWidth - label.BranchSummaryRight - 12) < 0.01, "combined badge reserves compact space for the cloud icon");
+        label.DataContext = commit;
+        commit.ParseDecorators("refs/heads/topic, refs/remotes/origin/topic, refs/remotes/upstream/topic, refs/remotes/origin/other");
+        label.Measure(new Size(double.PositiveInfinity, 26));
+        Check(label.BranchSummaryAdditionalCount == 2, "extra count groups matching branches even when they are not the displayed label");
+        Check(Math.Abs(label.DesiredSize.Width - label.BranchSummaryRight - 1.5 - label.BranchSummarySuffixWidth) <= 1,
+            "summary reserves postfix space only when additional labels exist");
+        Check(commit.BranchToolTip.Contains("upstream/topic") && commit.BranchToolTip.Contains("origin/main"), "tooltip retains every grouped ref name");
+
+        var remoteOnly = new Commit();
+        remoteOnly.ParseDecorators("refs/remotes/origin/topic, refs/remotes/upstream/topic");
+        label.DataContext = remoteOnly;
+        label.Measure(new Size(double.PositiveInfinity, 26));
+        Check(!label.BranchSummaryHasRemote && label.BranchSummaryAdditionalCount == 1, "remote refs stay separate when no matching local is on the commit");
+        Check(label.BranchSummaryText == "origin/topic", "remote-only labels retain the remote prefix");
+
+        var longName = "feature/" + string.Concat(Enumerable.Repeat("árvíztűrő-e\u0301-😀/", 15));
+        var longCommit = new Commit();
+        longCommit.ParseDecorators($"HEAD -> refs/heads/{longName}, refs/remotes/origin/{longName}, refs/heads/other");
+        label.DataContext = longCommit;
+        label.Measure(new Size(84, 26));
+        label.Arrange(new Rect(0, 0, 84, 26));
+        Check(label.BranchSummaryText.EndsWith("...", StringComparison.Ordinal), "long branch names use a trailing ellipsis");
+        Check(label.BranchSummaryRight + label.BranchSummarySuffixWidth <= 84, "badge and external count fit inside a minimum-width column");
+        Check(label.BranchSummaryHasRemote && label.BranchSummaryAdditionalCount == 1, "truncation preserves icons and the grouped count");
+        Check(!label.BranchSummaryText.EnumerateRunes().Any(x => x.Value == 0xFFFD), "truncation preserves Unicode characters");
+        Check(longCommit.BranchToolTip.Contains(longName), "tooltip retains the full untruncated branch name");
+        label.Measure(new Size(4096, 26));
+        label.Arrange(new Rect(0, 0, 4096, 26));
+        Check(label.BranchSummaryText == longName, "widening the column restores the full name");
+        label.Arrange(new Rect(0, 0, 84, 26));
+        Check(label.BranchSummaryText.EndsWith("...", StringComparison.Ordinal) && label.BranchSummaryRight + label.BranchSummarySuffixWidth <= 84,
+            "arrange also constrains a badge measured at a larger width");
+        label.ShowBranchSummary = false;
+        label.Measure(new Size(double.PositiveInfinity, 26));
+        Check(!label.BranchSummaryHasRemote && label.BranchSummarySuffixWidth == 0 && label.DesiredSize.Width > 84,
+            "other ref presenters retain their existing rendering behavior");
+    }
+
+    private static void CheckGraphBranchContext()
+    {
+        var root = new Commit { SHA = "root" };
+        var mainParent = new Commit { SHA = "main-parent", Parents = [root.SHA] };
+        var featureParent = new Commit { SHA = "feature-parent", Parents = [root.SHA] };
+        var feature = new Commit { SHA = "feature", Parents = [featureParent.SHA] };
+        feature.ParseDecorators("refs/heads/feature, refs/remotes/origin/feature");
+        var main = new Commit { SHA = "main", Parents = [mainParent.SHA, feature.SHA] };
+        main.ParseDecorators("HEAD -> refs/heads/main");
+        CommitGraph.Generate([main, feature, mainParent, featureParent, root], false, CommitGraphHighlighting.All, []);
+        Check(mainParent.GraphBranches.Single().Name == "main", "main ancestry inherits the main lane branch");
+        Check(featureParent.GraphBranches.Select(x => x.Name).SequenceEqual(new[] { "feature", "origin/feature" }),
+            "merged feature ancestry inherits its own lane branch and remote");
+        Check(root.GraphBranches.Single().Name == "main", "shared ancestry follows the active branch lane");
+        CommitGraph.Generate([root], false, CommitGraphHighlighting.All, []);
+        Check(root.GraphBranches.Count == 0, "graph regeneration clears branch context when no known branch reaches a commit");
+    }
+
+    private static void CheckBranchHover(Repository repo, Window window)
+    {
+        var vm = repo.Histories;
+        var original = vm.Commits;
+        var ancestor = new Commit { SHA = new string('a', 40), Subject = "Ancestor without refs" };
+        var tip = new Commit { SHA = original[0].SHA, Subject = original[0].Subject, Parents = [ancestor.SHA] };
+        tip.ParseDecorators("HEAD -> refs/heads/main, refs/remotes/origin/main");
+        try
+        {
+            vm.Commits = [tip, ancestor];
+            vm.IsBranchesColumnVisible = true;
+            var list = window.GetVisualDescendants().OfType<Views.HistoriesCommitList>().Single();
+            PumpUntil(() => list.GetVisualDescendants().OfType<DataGridRow>().Any(x => ReferenceEquals(x.DataContext, ancestor)));
+            var row = list.GetVisualDescendants().OfType<DataGridRow>().Single(x => ReferenceEquals(x.DataContext, ancestor));
+            var cell = row.GetVisualDescendants().OfType<Border>().Single(x => x.Child is Views.CommitRefsPresenter { ShowBranchSummary: true });
+            var label = (Views.CommitRefsPresenter)cell.Child;
+            Check(label.BranchSummaryRight == 0 && label.BranchSummaryRefs == null, "unlabeled branch cell is blank before hover");
+            var pointer = new Pointer(8, PointerType.Mouse, true);
+            var position = cell.TranslatePoint(new Point(10, 10), window).Value;
+            cell.RaiseEvent(new PointerEventArgs(InputElement.PointerEnteredEvent, cell, pointer, window, position, 0,
+                new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.Other), KeyModifiers.None));
+            PumpUntil(() => label.BranchSummaryText == "main");
+            Check(label.Opacity == 0.7 && label.BranchSummaryHasRemote && label.BranchSummaryAdditionalCount == 0,
+                "hover shows a grouped branch badge at 70 percent opacity");
+            Check(label.DecoratorAt(new Point(4, 4))?.Type == DecoratorType.LocalBranchHead, "ancestor hover badge does not claim to be HEAD");
+            var connections = window.GetVisualDescendants().OfType<Views.CommitBranchConnections>().Single();
+            var graph = window.GetVisualDescendants().OfType<Views.CommitGraph>().Single();
+            var ancestorDot = vm.Graph.Dots[2];
+            var ancestorY = graph.TranslatePoint(new Point(ancestorDot.Center.X, ancestorDot.Center.Y * graph.Layout.RowHeight - graph.Layout.StartY), connections).Value.Y;
+            Check(!connections.Connections.Any(x => x.End.Y == ancestorY), "hover badges do not draw connecting lines");
+            Check(ToolTip.GetTip(cell) as string == "main\norigin/main", "hover tooltip includes all full branch names");
+            Check(ancestor.Decorators.Count == 0, "hover does not add fake branch refs to the commit");
+            cell.RaiseEvent(new PointerEventArgs(InputElement.PointerExitedEvent, cell, pointer, window, position, 0,
+                new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.Other), KeyModifiers.None));
+            PumpUntil(() => label.BranchSummaryRight == 0);
+            Check(label.BranchSummaryRefs == null && label.Opacity == 1 && ToolTip.GetTip(cell) == null, "leaving the branch cell removes the hover badge and tooltip");
+            var tipRow = list.GetVisualDescendants().OfType<DataGridRow>().Single(x => ReferenceEquals(x.DataContext, tip));
+            var tipCell = tipRow.GetVisualDescendants().OfType<Border>().Single(x => x.Child is Views.CommitRefsPresenter { ShowBranchSummary: true });
+            tipCell.RaiseEvent(new PointerEventArgs(InputElement.PointerEnteredEvent, tipCell, pointer, window, position, 0,
+                new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.Other), KeyModifiers.None));
+            var tipLabel = (Views.CommitRefsPresenter)tipCell.Child;
+            Check(tipLabel.Opacity == 1 && tipLabel.BranchSummaryRefs == null, "existing branch tip labels stay opaque on hover");
+            label.BranchSummaryRefs = ancestor.GraphBranches;
+            label.Opacity = 0.7;
+            label.DataContext = tip;
+            Check(label.BranchSummaryRefs == null && label.Opacity == 1, "recycled cells clear hover state when their commit changes");
+        }
+        finally
+        {
+            vm.IsBranchesColumnVisible = false;
+            vm.Commits = original;
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    private static void CheckBranchesColumn(Repository repo, Window window, string fixture)
+    {
+        var commit = new Commit();
+        Check(commit.BranchSummary.Length == 0 && commit.BranchToolTip == null, "undecorated commits have blank branch cells");
+        commit.ParseDecorators("HEAD, tag: refs/tags/v1");
+        Check(commit.BranchSummary.Length == 0 && commit.BranchToolTip == null, "tags and detached HEAD are not branches");
+        commit.ParseDecorators("refs/remotes/origin/feature/topic");
+        Check(commit.BranchSummary == "origin/feature/topic", "single remote branch retains its full name");
+        commit.ParseDecorators("refs/heads/feature/topic");
+        Check(commit.BranchSummary == "feature/topic +1", "local branch takes priority over remote branch");
+        commit.ParseDecorators("HEAD -> refs/heads/main");
+        Check(commit.BranchSummary == "main +2", "current branch takes priority and counts additional branches");
+        Check(commit.BranchToolTip == "main\nfeature/topic\norigin/feature/topic", "tooltip includes every full branch name and no other refs");
+
+        var vm = repo.Histories;
+        var list = window.GetVisualDescendants().OfType<Views.HistoriesCommitList>().Single();
+        var column = list.Columns[5];
+        Check(!vm.IsBranchesColumnVisible && !column.IsVisible, "branches column is opt-in");
+        var message = list.GetVisualDescendants().OfType<Views.CommitMessagePanel>().Single();
+        Check(!message.RefsAfterSubject && message.Children[0].Bounds.Right <= message.Children[1].Bounds.Left,
+            "message refs precede the subject when the branch column is hidden");
+        Check(list.Columns.OrderBy(x => x.DisplayIndex).Select(x => list.Columns.IndexOf(x)).SequenceEqual(new[] { 5, 2, 0, 1, 3, 4 }),
+            "new branch column precedes existing saved column order without changing source indexes");
+        var graph = window.GetVisualDescendants().OfType<Views.CommitGraph>().Single();
+        vm.IsBranchesColumnVisible = true;
+        PumpUntil(() => column.IsVisible && column.ActualWidth > 0 && graph.Margin.Left >= column.ActualWidth);
+        PumpUntil(() => message.RefsAfterSubject && message.Children[1].Bounds.Right < message.Children[0].Bounds.Left);
+        Check(message.Children[0].Bounds.Left == message.Children[1].Bounds.Right + 4,
+            "message refs follow immediately after the subject when the branch column is visible");
+        var messageRefs = (Views.CommitRefsPresenter)message.Children[0];
+        Check(!messageRefs.ShowBranches && messageRefs.DecoratorAt(new Point(4, 4))?.Type == DecoratorType.Tag,
+            "branch column hides message branch badges while preserving tag badges");
+        var subject = (Views.CommitSubjectPresenter)message.Children[1];
+        var originalSubject = subject.Subject;
+        subject.Subject = new string('x', 1000);
+        PumpUntil(() => subject.Bounds.Width > 0 && message.Children[0].Bounds.Right <= message.Bounds.Width);
+        Check(message.Children[0].Bounds.Width > 0, "long messages leave room for trailing tag labels");
+        subject.Subject = originalSubject;
+        var workingRow = list.GetVisualDescendants().OfType<DataGridRow>().Single(x => ReferenceEquals(x.DataContext, vm.WorkingDirectory));
+        var workingCell = workingRow.GetVisualDescendants().OfType<Border>().Single(x => x.Child is Views.CommitRefsPresenter { ShowBranchSummary: true });
+        var workingLabel = (Views.CommitRefsPresenter)workingCell.Child;
+        PumpUntil(() => workingLabel.BranchSummaryText == "main");
+        Check(workingLabel.Opacity == 0.7 && workingLabel.DecoratorAt(new Point(4, 4))?.Type == DecoratorType.LocalBranchHead,
+            "working-directory row permanently shows the active branch at 70 percent opacity");
+        Check(ReferenceEquals(workingLabel.BranchSummaryBrush, vm.WorkingDirectory.BranchBrush) && ToolTip.GetTip(workingCell) as string == "main",
+            "working-directory badge uses the graph color and full-name tooltip");
+        var activeBranch = vm.CurrentBranch;
+        vm.CurrentBranch = new Branch { Name = "next-branch", IsLocal = true };
+        PumpUntil(() => workingLabel.BranchSummaryText == "next-branch");
+        Check(workingLabel.Opacity == 0.7, "working-directory branch changes preserve the badge opacity");
+        vm.CurrentBranch = new Branch { IsDetachedHead = true };
+        PumpUntil(() => workingLabel.BranchSummaryRight == 0);
+        Check(workingLabel.BranchSummaryRight == 0, "detached HEAD does not display a false working-directory branch");
+        vm.CurrentBranch = activeBranch;
+        PumpUntil(() => workingLabel.BranchSummaryText == "main");
+        var cell = list.GetVisualDescendants().OfType<Border>().Single(x => x.DataContext is Commit && ToolTip.GetTip(x) as string == "main");
+        Check(cell.Bounds.Width > 0, "branch tooltip is attached to the visible cell");
+        var label = cell.GetVisualDescendants().OfType<Views.CommitRefsPresenter>().Single();
+        Check(label.ShowBranchSummary && label.DecoratorAt(new Point(4, 4))?.Name == "main", "branch column uses the shared colored label renderer");
+        Check(label.UseGraphColor == vm.Commits[0].IsHighlightedInGraph, "branch column follows the message label graph colors");
+        label.DataContext = commit;
+        label.Measure(new Size(double.PositiveInfinity, 26));
+        Check(label.DecoratorAt(new Point(4, 4))?.Type == DecoratorType.CurrentBranchHead, "colored summary badge uses the primary branch icon");
+        var badgeRight = label.BranchSummaryRight;
+        Check(label.BranchSummarySuffixWidth > 0, "multiple branches have a separate count postfix");
+        var singleBranch = new Commit();
+        singleBranch.ParseDecorators("HEAD -> refs/heads/main");
+        label.DataContext = singleBranch;
+        label.Measure(new Size(double.PositiveInfinity, 26));
+        Check(label.BranchSummaryRight == badgeRight && label.BranchSummarySuffixWidth == 0,
+            "count postfix does not change the colored badge width and is omitted for one branch");
+        label.DataContext = commit;
+        label.Measure(new Size(double.PositiveInfinity, 26));
+        var summaryWidth = label.DesiredSize.Width;
+        label.ShowBranchSummary = false;
+        label.Measure(new Size(double.PositiveInfinity, 26));
+        Check(label.DesiredSize.Width > summaryWidth, "summary renders one badge instead of every ref");
+        label.ShowBranchSummary = true;
+        label.DataContext = vm.Commits[0];
+        var connections = window.GetVisualDescendants().OfType<Views.CommitBranchConnections>().Single();
+        PumpUntil(() => connections.Connections.Count == 0);
+        Check(connections.Connections.Count == 0, "intervening SHA column suppresses branch connectors");
+        vm.IsSHAColumnVisible = false;
+        PumpUntil(() => connections.Connections.Count == 1);
+        var connection = connections.Connections[0];
+        Check(connection.IsActive && ReferenceEquals(connection.Brush, label.BranchSummaryBrush), "active branch connector uses the badge color at full opacity");
+        Check(connection.Start.Y == connection.End.Y && connection.Start.X < connection.End.X, "connector runs horizontally from badge toward commit dot");
+        var dot = vm.Graph.Dots[1];
+        var expectedEnd = graph.TranslatePoint(new Point(dot.Center.X, dot.Center.Y * graph.Layout.RowHeight - graph.Layout.StartY), connections).Value;
+        Check(connection.End == expectedEnd, "connector ends at the corresponding graph dot");
+        label.DataContext = commit;
+        PumpUntil(() => connections.Connections.Count == 1 && connections.Connections[0].TextGapWidth > 0);
+        Check(connections.Connections[0].TextGapWidth == label.BranchSummarySuffixWidth,
+            "connector leaves a gap for the count outside the badge");
+        label.DataContext = vm.Commits[0];
+        PumpUntil(() => connections.Connections[0].TextGapWidth == 0);
+        var header = window.GetVisualDescendants().OfType<Border>().Single(x => x.Name == "BranchesColumnResizeHandle");
+        var pointer = new Pointer(7, PointerType.Mouse, true);
+        var resizeStart = header.TranslatePoint(new Point(header.Bounds.Width - 1, header.Bounds.Height / 2), window).Value;
+        Check(ReferenceEquals(window.InputHitTest(resizeStart), header), "branch resize handle is reachable beside graph header tools");
+        var resizeEnd = resizeStart + new Vector(60, 0);
+        var originalWidth = column.ActualWidth;
+        header.RaiseEvent(new PointerPressedEventArgs(header, pointer, window, resizeStart, 0,
+            new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed), KeyModifiers.None));
+        header.RaiseEvent(new PointerEventArgs(InputElement.PointerMovedEvent, header, pointer, window, resizeEnd, 0,
+            new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.Other), KeyModifiers.None));
+        header.RaiseEvent(new PointerReleasedEventArgs(header, pointer, window, resizeEnd, 0,
+            new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased), KeyModifiers.None, MouseButton.Left));
+        PumpUntil(() => column.ActualWidth > originalWidth + 50);
+        Check(Math.Abs(vm.BranchesColumnWidth - column.ActualWidth) < 0.01, "dragging branch header saves its width");
+        PumpUntil(() => connections.Connections[0].End.X > connection.End.X + 50);
+        Check(Math.Abs(connections.Connections[0].End.X - connection.End.X - 60) < 0.01, "connector follows column resizing");
+        var inactive = new Commit();
+        inactive.ParseDecorators("refs/heads/topic");
+        label.DataContext = inactive;
+        PumpUntil(() => connections.Connections.Count == 1 && !connections.Connections[0].IsActive);
+        Check(!connections.Connections[0].IsActive, "other branch connectors use the reduced-opacity rendering path");
+        label.DataContext = new Commit();
+        PumpUntil(() => connections.Connections.Count == 0);
+        label.DataContext = vm.Commits[0];
+        PumpUntil(() => connections.Connections.Count == 1);
+        vm.IsSHAColumnVisible = true;
+        PumpUntil(() => connections.Connections.Count == 0);
+        repo.UIStates.Save();
+        Check(RepositoryUIStates.Load(Path.Combine(fixture, ".git")).IsBranchesColumnVisibleInHistory, "branch column choice persists per repository");
+        Check(Math.Abs(RepositoryUIStates.Load(Path.Combine(fixture, ".git")).BranchesColumnWidth - vm.BranchesColumnWidth) < 0.01,
+            "resized branch column width persists per repository");
+        var restored = new Views.Histories { DataContext = vm };
+        Check(restored.FindControl<Views.HistoriesCommitList>("CommitListContainer").Columns[5].Width.Value == vm.BranchesColumnWidth,
+            "new history views restore the saved branch column width");
+        vm.IsBranchesColumnVisible = false;
+        PumpUntil(() => !column.IsVisible);
+        PumpUntil(() => !message.RefsAfterSubject && message.Children[0].Bounds.Right <= message.Children[1].Bounds.Left);
+        Check(messageRefs.ShowBranches && messageRefs.DecoratorAt(new Point(4, 4))?.Type == DecoratorType.CurrentBranchHead,
+            "hiding the branch column restores message branch badges");
+        var expectedOffset = list.Columns.Where(x => x.IsVisible && x.DisplayIndex < list.Columns[0].DisplayIndex).Sum(x => x.ActualWidth);
+        PumpUntil(() => Math.Abs(graph.Margin.Left - expectedOffset) < 0.01);
+        // Leave the remaining interaction checks in their usual column order.
+        for (var i = 0; i < 5; i++)
+            list.Columns[i].DisplayIndex = i + 1;
     }
 
     private static void CheckHeadPreference(string fixture)
@@ -364,7 +639,7 @@ internal static class Program
             list.SelectedItem = vm.Commits[0];
             PumpUntil(() => !vm.IsWorkingDirectorySelected);
             var row = list.GetVisualDescendants().OfType<DataGridRow>().Single(x => ReferenceEquals(x.DataContext, vm.WorkingDirectory));
-            foreach (var cell in row.GetVisualDescendants().OfType<DataGridCell>().Where(x => x.Bounds.Width > 0))
+            foreach (var cell in row.GetVisualDescendants().OfType<DataGridCell>().Where(x => x.IsEffectivelyVisible && x.Bounds.Width > 0))
             foreach (var x in new[] { 2.0, cell.Bounds.Width / 2, cell.Bounds.Width - 2 })
             {
                 var point = cell.TranslatePoint(new Point(x, cell.Bounds.Height / 2), window).Value;
