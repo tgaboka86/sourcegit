@@ -148,7 +148,9 @@ internal static class Program
         var graph = window.GetVisualDescendants().OfType<Views.CommitGraph>().Single();
         var connections = window.GetVisualDescendants().OfType<Views.CommitBranchConnections>().Single();
         Check(!vm.IsBranchesColumnVisible && !column.IsVisible, "branch column defaults to hidden");
-        Check(column.DisplayIndex == 0 && list.Columns[0].DisplayIndex == 1, "branch column is before the graph without changing source indexes");
+        Check(column.DisplayIndex < list.Columns[0].DisplayIndex &&
+            !list.Columns.Any(x => x.IsVisible && x.DisplayIndex > column.DisplayIndex && x.DisplayIndex < list.Columns[0].DisplayIndex),
+            "branch column is before the graph without changing source indexes");
         vm.IsBranchesColumnVisible = true;
         PumpUntil(() => column.IsVisible && column.ActualWidth > 0 && graph.Margin.Left == column.ActualWidth);
         var tip = vm.Commits.Single(x => x.IsCurrentHead);
