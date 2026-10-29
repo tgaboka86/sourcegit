@@ -10,41 +10,72 @@ using Avalonia.Styling;
 
 namespace SourceGit.Views
 {
-    public class LauncherTabSizeBox : Border
+    public class LauncherTabsPanel : Panel
     {
-        public static readonly DirectProperty<LauncherTabSizeBox, bool> UseFixedWidthProperty =
-            AvaloniaProperty.RegisterDirect<LauncherTabSizeBox, bool>(
-                nameof(UseFixedWidth),
-                static o => o.UseFixedWidth,
-                static (o, v) => o.UseFixedWidth = v);
+        public static readonly StyledProperty<bool> UseFixedWidthProperty =
+            AvaloniaProperty.Register<LauncherTabsPanel, bool>(nameof(UseFixedWidth), true);
+
+        public static readonly StyledProperty<double> HeaderWidthProperty =
+            AvaloniaProperty.Register<LauncherTabsPanel, double>(nameof(HeaderWidth));
+
+        static LauncherTabsPanel()
+        {
+            AffectsMeasure<LauncherTabsPanel>(UseFixedWidthProperty, HeaderWidthProperty);
+        }
 
         public bool UseFixedWidth
         {
-            get => _useFixedWidth;
-            set => SetAndRaise(UseFixedWidthProperty, ref _useFixedWidth, value);
+            get => GetValue(UseFixedWidthProperty);
+            set => SetValue(UseFixedWidthProperty, value);
         }
 
-        public LauncherTabSizeBox()
+        public double HeaderWidth
         {
-            Width = 200;
+            get => GetValue(HeaderWidthProperty);
+            set => SetValue(HeaderWidthProperty, value);
         }
 
-        protected override Type StyleKeyOverride => typeof(Border);
-
-        protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+        protected override Size MeasureOverride(Size availableSize)
         {
-            base.OnPropertyChanged(change);
-
-            if (change.Property == UseFixedWidthProperty)
+            var width = 0.0;
+            var height = 0.0;
+            var widest = 200.0;
+            foreach (var child in Children)
             {
-                if (_useFixedWidth)
-                    Width = 200;
-                else
-                    Width = double.NaN;
+                child.Measure(new Size(double.PositiveInfinity, availableSize.Height));
+                width += child.DesiredSize.Width;
+                height = Math.Max(height, child.DesiredSize.Height);
+                widest = Math.Max(widest, child.DesiredSize.Width);
             }
+
+            _tabWidth = 0;
+            if (UseFixedWidth && Children.Count > 0)
+            {
+                // Reserve the scroller margins (12) and the new-tab button (32).
+                // Keep tabs usable at the minimum width, then fall back to scrolling.
+                _tabWidth = Math.Max(100, Math.Min(widest, Math.Max(0, HeaderWidth - 44) / Children.Count));
+                foreach (var child in Children)
+                    child.Measure(new Size(_tabWidth, availableSize.Height));
+                width = _tabWidth * Children.Count;
+            }
+
+            return new Size(width, height);
         }
 
-        private bool _useFixedWidth = true;
+        protected override Size ArrangeOverride(Size finalSize)
+        {
+            var x = 0.0;
+            foreach (var child in Children)
+            {
+                var width = UseFixedWidth ? _tabWidth : child.DesiredSize.Width;
+                child.Arrange(new Rect(x, 0, width, finalSize.Height));
+                x += width;
+            }
+
+            return finalSize;
+        }
+
+        private double _tabWidth;
     }
 
     public partial class LauncherTabBar : UserControl
