@@ -839,7 +839,7 @@ namespace SourceGit.ViewModels
         private int _maxHistoryCommits = 20000;
         private int _refreshThrottling = 1000;
         private int _subjectGuideLength = 50;
-        private int _workingDirectoryHeadMode = 0;
+        private int _workingDirectoryHeadMode = 2;
         private bool _useFixedTabWidth = true;
         private bool _useAutoHideScrollBars = true;
         private bool _extendContextMenusWithHgTerminology = false;
@@ -852,7 +852,7 @@ namespace SourceGit.ViewModels
 
         private bool _showTagsInGraph = true;
         private bool _useTwoColumnsLayoutInHistories = false;
-        private bool _useWideDetailsLayoutInHistories = false;
+        private bool _useWideDetailsLayoutInHistories = true;
         private bool _displayTimeAsPeriodInHistories = false;
         private bool _useSideBySideDiff = false;
         private bool _ignoreWhitespaceChangesInDiff = false;

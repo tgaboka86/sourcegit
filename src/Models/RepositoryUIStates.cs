@@ -15,7 +15,7 @@ namespace SourceGit.Models
             set;
         } = HistoryShowFlags.None;
 
-        public bool IsBranchesColumnVisibleInHistory { get; set; } = false;
+        public bool IsBranchesColumnVisibleInHistory { get; set; } = true;
 
         public double BranchesColumnWidth { get; set; } = 180;
 
@@ -23,7 +23,7 @@ namespace SourceGit.Models
         {
             get;
             set;
-        } = false;
+        } = true;
 
         public bool IsAuthorColumnVisibleInHistory
         {
