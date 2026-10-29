@@ -161,7 +161,10 @@ namespace SourceGit.ViewModels
             set
             {
                 if (SetProperty(ref _quickSearchText, value))
+                {
+                    OnPropertyChanged(nameof(IsQuickSearchFilterActive));
                     RefreshQuickSearch();
+                }
             }
         }
 
@@ -171,9 +174,14 @@ namespace SourceGit.ViewModels
             set
             {
                 if (SetProperty(ref _isQuickSearchFilterEnabled, value))
+                {
+                    OnPropertyChanged(nameof(IsQuickSearchFilterActive));
                     ApplyQuickSearchFilter();
+                }
             }
         }
+
+        public bool IsQuickSearchFilterActive => _isQuickSearchFilterEnabled && !string.IsNullOrEmpty(_quickSearchText);
 
         public bool IsQuickSearching
         {
@@ -231,7 +239,11 @@ namespace SourceGit.ViewModels
             OnPropertyChanged(nameof(QuickSearchStatus));
             ApplyQuickSearchFilter();
             if (!IsQuickSearching)
+            {
+                if (!string.IsNullOrEmpty(_quickSearchText))
+                    SelectedCommits = [];
                 return;
+            }
 
             var cancellation = new CancellationTokenSource();
             _quickSearchCancellation = cancellation;
@@ -252,6 +264,10 @@ namespace SourceGit.ViewModels
                     var selected = _selectedCommits.Count == 1 ?
                         _quickSearchMatches.Find(c => c.SHA == _selectedCommits[0].SHA) : null;
                     SelectedCommits = [selected ?? _quickSearchMatches[0]];
+                }
+                else
+                {
+                    SelectedCommits = [];
                 }
                 OnPropertyChanged(nameof(HasQuickSearchMatches));
                 OnPropertyChanged(nameof(QuickSearchStatus));
@@ -291,7 +307,7 @@ namespace SourceGit.ViewModels
 
         private void ApplyQuickSearchFilter()
         {
-            var visible = _isQuickSearchFilterEnabled && !string.IsNullOrEmpty(_quickSearchText) ? _quickSearchMatches : _commits;
+            var visible = IsQuickSearchFilterActive ? _quickSearchMatches : _commits;
             if (ReferenceEquals(visible, _displayedCommits))
                 return;
 
@@ -928,7 +944,7 @@ namespace SourceGit.ViewModels
                     extraHeads.Add(c.SHA);
             }
 
-            var graph = _isQuickSearchFilterEnabled && !string.IsNullOrEmpty(_quickSearchText) ?
+            var graph = IsQuickSearchFilterActive ?
                 Models.CommitGraph.GenerateFiltered(_commits, commits, firstParentOnly, highlighting, extraHeads, IsWorkingDirectoryVisible, Preferences.Instance.WorkingDirectoryHeadMode != 0) :
                 Models.CommitGraph.Generate(commits, firstParentOnly, highlighting, extraHeads, IsWorkingDirectoryVisible, Preferences.Instance.WorkingDirectoryHeadMode != 0);
             if (IsWorkingDirectoryVisible)

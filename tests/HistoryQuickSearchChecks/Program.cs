@@ -130,8 +130,14 @@ internal static class Program
 
             histories.SelectedCommits = [commits[1]];
             var view = new HistoryView { DataContext = histories };
-            var window = new Window { Width = 1000, Height = 650, Content = view };
+            var sidebarSearch = new TextBox { Watermark = "Sidebar search" };
+            var shell = new Grid { RowDefinitions = RowDefinitions.Parse("28,*") };
+            shell.Children.Add(sidebarSearch);
+            Grid.SetRow(view, 1);
+            shell.Children.Add(view);
+            var window = new Window { Width = 1000, Height = 650, Content = shell };
             window.Show();
+            SetWindowActive(window, true);
             Dispatcher.UIThread.RunJobs();
             WaitFor(() => !histories.IsQuickSearching);
             view.FindControl<DataGrid>("CommitListContainer")!.Focus();
@@ -151,6 +157,25 @@ internal static class Program
             var listPosition = view.FindControl<DataGrid>("CommitListContainer")!.TranslatePoint(default, view)!.Value;
             Check(searchPosition.X >= toolsPosition.X + toolbar.Bounds.Width && listPosition.Y >= toolsPosition.Y + toolbar.Bounds.Height,
                 "merged toolbar icons and quick search occupy their own row without overlap");
+            view.FindControl<DataGrid>("CommitListContainer")!.Focus();
+            window.KeyPressQwerty(PhysicalKey.F3, RawInputModifiers.None);
+            Check(box.IsKeyboardFocusWithin && Math.Abs(box.SelectionEnd - box.SelectionStart) == box.Text.Length,
+                "F3 focuses quick search and selects its text from the commit list");
+            Check(histories.SelectedCommits.Single().SHA == first, "F3 focuses search without changing the selected commit");
+            window.KeyTextInput("body-only");
+            Check(histories.QuickSearchText == "body-only", "typing immediately after F3 replaces the search query");
+            WaitFor(() => !histories.IsQuickSearching);
+            sidebarSearch.Focus();
+            window.KeyPressQwerty(PhysicalKey.F3, RawInputModifiers.None);
+            Check(box.IsKeyboardFocusWithin, "F3 focuses history search from the sidebar");
+            view.IsVisible = false;
+            sidebarSearch.Focus();
+            window.KeyPressQwerty(PhysicalKey.F3, RawInputModifiers.None);
+            Check(sidebarSearch.IsKeyboardFocusWithin, "hidden history does not intercept F3");
+            view.IsVisible = true;
+            window.KeyPressQwerty(PhysicalKey.F3, RawInputModifiers.None);
+            histories.QuickSearchText = "Shared";
+            WaitFor(() => !histories.IsQuickSearching);
             window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
             Check(histories.SelectedCommits.Single().SHA == second, "Enter selects next match");
             window.KeyPressQwerty(PhysicalKey.F3, RawInputModifiers.Shift);
@@ -160,7 +185,89 @@ internal static class Program
             Dispatcher.UIThread.RunJobs();
             var border = box.GetVisualDescendants().OfType<Border>().First(b => b.Name == "PART_BorderElement");
             Check(histories.SelectedCommits.Single().SHA == first, "filter toggle preserves visible selection");
-            Check(border.Background is ISolidColorBrush brush && brush.Color == Color.Parse("#FFF2CC"), "focused filter box has yellow background");
+            foreach (var theme in new[] { Avalonia.Styling.ThemeVariant.Light, Avalonia.Styling.ThemeVariant.Dark })
+            {
+                Application.Current!.RequestedThemeVariant = theme;
+                Dispatcher.UIThread.RunJobs();
+                box.Focus();
+                var textPresenter = box.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.TextPresenter>()
+                    .Single(p => p.Name == "PART_TextPresenter");
+                SetWindowActive(window, false);
+                Dispatcher.UIThread.RunJobs();
+                Check(!window.IsActive && textPresenter.CaretBrush is ISolidColorBrush inactiveCaret && inactiveCaret.Color.A == 0,
+                    $"{theme}: inactive window hides the search caret");
+                Check(border.BorderBrush is ISolidColorBrush inactiveBorder && box.BorderBrush is ISolidColorBrush normalBorder &&
+                    inactiveBorder.Color == normalBorder.Color, $"{theme}: inactive search uses its normal border instead of active focus styling");
+                Check(box.SelectionBrush is ISolidColorBrush selectionBrush && box.BorderBrush is ISolidColorBrush borderBrush &&
+                    selectionBrush.Color == borderBrush.Color, $"{theme}: inactive text selection uses a neutral highlight");
+                if (args.Length > 0)
+                {
+                    window.UpdateLayout();
+                    AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                    using var inactiveFrame = window.CaptureRenderedFrame();
+                    inactiveFrame!.Save(Path.Combine(Path.GetDirectoryName(args[0])!, $"history-inactive-{theme.ToString().ToLowerInvariant()}.png"));
+                }
+                var otherInput = new TextBox();
+                var otherWindow = new Window { Width = 200, Height = 80, Content = otherInput };
+                otherWindow.Show();
+                SetWindowActive(otherWindow, true);
+                otherInput.Focus();
+                var previousQuery = histories.QuickSearchText;
+                otherWindow.KeyPressQwerty(PhysicalKey.F3, RawInputModifiers.None);
+                otherWindow.KeyTextInput("another window");
+                Check(histories.QuickSearchText == previousQuery && otherInput.Text == "another window" &&
+                    textPresenter.CaretBrush is ISolidColorBrush hiddenCaret && hiddenCaret.Color.A == 0,
+                    $"{theme}: keys in another window do not activate or edit history search");
+                otherWindow.Close();
+                SetWindowActive(window, true);
+                box.Focus();
+                Dispatcher.UIThread.RunJobs();
+                Check((textPresenter.CaretBrush ?? textPresenter.Foreground) is ISolidColorBrush activeCaret && activeCaret.Color.A > 0,
+                    $"{theme}: reactivating the window restores the caret");
+                var list = view.FindControl<DataGrid>("CommitListContainer")!;
+                var tinted = theme == Avalonia.Styling.ThemeVariant.Light ? Color.Parse("#FFFFF9E6") : Color.Parse("#FF302D20");
+                var normal = theme == Avalonia.Styling.ThemeVariant.Light ? Color.Parse("#FFFFFFFF") : Color.Parse("#FF1C1C1C");
+                var presenter = list.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.DataGridRowsPresenter>().Single();
+                Check(list.Background is ISolidColorBrush background && background.Color == tinted &&
+                    presenter.Background is ISolidColorBrush rows && rows.Color == tinted, $"{theme}: active filter tints history rows");
+                var headers = list.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.DataGridColumnHeadersPresenter>().Single();
+                var headerColor = theme == Avalonia.Styling.ThemeVariant.Light ? Color.Parse("#FFFBFBFB") : Color.Parse("#FF272727");
+                Check(headers.Background is ISolidColorBrush headerBrush && headerBrush.Color == headerColor,
+                    $"{theme}: column headers retain normal background during filtering");
+                Check(border.Background is not ISolidColorBrush input || input.Color != tinted && input.Color != Color.Parse("#FFF2CC"),
+                    $"{theme}: search field keeps normal theme background");
+                var graph = view.FindControl<SourceGit.Views.CommitGraph>("CommitGraph")!;
+                Check(graph.DotBrush is ISolidColorBrush dots && dots.Color == tinted, $"{theme}: graph dots use history background");
+                histories.IsQuickSearchFilterEnabled = false;
+                Dispatcher.UIThread.RunJobs();
+                Check(list.Background is ISolidColorBrush unfiltered && unfiltered.Color == normal, $"{theme}: query without filter has no tint");
+                histories.IsQuickSearchFilterEnabled = true;
+                histories.QuickSearchText = string.Empty;
+                Dispatcher.UIThread.RunJobs();
+                Check(!histories.IsQuickSearchFilterActive && list.Background is ISolidColorBrush empty && empty.Color == normal,
+                    $"{theme}: enabled filter with empty query has no tint");
+                histories.QuickSearchText = "body-only";
+                WaitFor(() => !histories.IsQuickSearching);
+                Check(histories.IsQuickSearchFilterActive && list.Background is ISolidColorBrush restored && restored.Color == tinted,
+                    $"{theme}: editing nonempty query restores active tint");
+                var clearButton = (Button)box.InnerRightContent!;
+                var clearIcon = (Avalonia.Controls.Shapes.Path)clearButton.Content!;
+                Check(clearButton.IsVisible && clearIcon.Fill is ISolidColorBrush iconBrush && iconBrush.Color.A > 0,
+                    $"{theme}: nonempty search shows a visible clear icon");
+                window.UpdateLayout();
+                var clearPoint = clearButton.TranslatePoint(new Point(clearButton.Bounds.Width / 2, clearButton.Bounds.Height / 2), window)!.Value;
+                window.MouseDown(clearPoint, MouseButton.Left, RawInputModifiers.None);
+                window.MouseUp(clearPoint, MouseButton.Left, RawInputModifiers.None);
+                Dispatcher.UIThread.RunJobs();
+                Check(histories.QuickSearchText.Length == 0 && box.Text.Length == 0 && histories.DisplayedCommits.Count == 2,
+                    $"{theme}: one click clears search and restores history");
+                Check(!clearButton.IsVisible && box.IsKeyboardFocusWithin, $"{theme}: empty search hides clear icon and retains focus");
+                histories.QuickSearchText = "body-only";
+                histories.IsQuickSearchFilterEnabled = true;
+                WaitFor(() => !histories.IsQuickSearching);
+            }
+            Application.Current!.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Light;
+            Dispatcher.UIThread.RunJobs();
             if (args.Length > 0)
             {
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick();
@@ -177,10 +284,22 @@ internal static class Program
             view.FindControl<DataGrid>("CommitListContainer")!.Focus();
             window.KeyPressQwerty(PhysicalKey.F, RawInputModifiers.Control);
             Check(box.IsKeyboardFocusWithin, "Ctrl+F works from commit list after clearing");
+            histories.QuickSearchText = "Shared";
+            WaitFor(() => !histories.IsQuickSearching);
+            Check(histories.SelectedCommits.Count == 1, "matching query selects a row before no-match edit");
             histories.QuickSearchText = "no such commit";
             WaitFor(() => !histories.IsQuickSearching);
+            Check(histories.SelectedCommits.Count == 0 && view.FindControl<DataGrid>("CommitListContainer")!.SelectedItems.Count == 0 &&
+                histories.DisplayedCommits.Count == 2, "no-match edit clears selection without filtering");
             histories.IsQuickSearchFilterEnabled = true;
             Check(histories.DisplayedCommits.Count == 0 && !histories.HasQuickSearchMatches, "no matches produces empty filtered history");
+            histories.QuickSearchText = "Shared";
+            WaitFor(() => !histories.IsQuickSearching);
+            Check(histories.SelectedCommits.Count == 1, "matching query restores selection while filtered");
+            histories.QuickSearchText = "no such filtered commit";
+            WaitFor(() => !histories.IsQuickSearching);
+            Check(histories.SelectedCommits.Count == 0 && view.FindControl<DataGrid>("CommitListContainer")!.SelectedItems.Count == 0,
+                "no-match edit clears selection while filtered");
             histories.ClearQuickSearch();
             for (var i = 0; i < 60; i++)
                 Git(fixture, "commit", "--allow-empty", "-m", $"Filler {i}");
@@ -337,6 +456,13 @@ internal static class Program
             return row.DataContext == commit && row.IsVisible && position.HasValue &&
                 position.Value.Y >= -0.5 && position.Value.Y + row.Bounds.Height <= presenter.Bounds.Height + 0.5;
         });
+    }
+
+    private static void SetWindowActive(Window window, bool active)
+    {
+        // Simulate the platform activation callback without taking native desktop focus.
+        typeof(WindowBase).GetMethod(active ? "HandleActivated" : "HandleDeactivated",
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.Invoke(window, null);
     }
 
     private static void WaitFor(Func<bool> condition)
