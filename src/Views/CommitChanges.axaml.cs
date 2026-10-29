@@ -27,6 +27,19 @@ namespace SourceGit.Views
             }
         }
 
+        private void OnDiffAreaSizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            // Keep room for the diff even when restoring a taller message pane.
+            ChangesDiffArea.RowDefinitions[0].MaxHeight = Math.Max(28, e.NewSize.Height - 84);
+        }
+
+        private async void OnCopyCommitMessage(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is ViewModels.CommitDetail { FullMessage: { } message })
+                await this.CopyTextAsync(message.Message);
+            e.Handled = true;
+        }
+
         private void OnChangeContextRequested(object sender, ContextRequestedEventArgs e)
         {
             e.Handled = true;
