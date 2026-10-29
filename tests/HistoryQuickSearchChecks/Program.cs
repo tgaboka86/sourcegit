@@ -1,0 +1,376 @@
+using System.Diagnostics;
+using System.Reflection;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Headless;
+using Avalonia.Input;
+using Avalonia.Media;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using SourceGit.Commands;
+using SourceGit.Models;
+using SourceGit.ViewModels;
+using Commit = SourceGit.Models.Commit;
+using HistoryView = SourceGit.Views.Histories;
+
+internal static class Program
+{
+    private static int _checks;
+
+    private static void Main(string[] args)
+    {
+        var fixture = Path.Combine(Path.GetTempPath(), "sourcegit-history-search-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(fixture);
+        SourceGit.Native.OS.GitExecutable = "git";
+        SourceGit.Native.OS.BasicDirectories.ConfigDir = fixture;
+        SourceGit.Native.OS.BasicDirectories.CacheDir = fixture;
+        typeof(Preferences).GetField("_instance", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, new Preferences());
+        AppBuilder.Configure<SourceGit.App>().UseSkia().WithInterFont()
+            .ConfigureFonts(manager => manager.AddFontCollection(new Avalonia.Media.Fonts.EmbeddedFontCollection(
+                new Uri("fonts:SourceGit"), new Uri("avares://SourceGit/Resources/Fonts"))))
+            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
+        try
+        {
+            if (args.Length >= 2 && args[0] == "--repository")
+            {
+                CheckRepositoryGraph(args[1], args.Length > 2 ? args[2] : null);
+                return;
+            }
+            Git(fixture, "init", "-b", "main");
+            Git(fixture, "config", "user.name", "Alice Shared");
+            Git(fixture, "config", "user.email", "alice@example.com");
+            Git(fixture, "commit", "--allow-empty", "-m", "Shared Alpha Subject", "-m", "Body-only needle\nLiteral [brackets]. and a \"quote\"\nUnicode: \u00e1rv\u00edzt\u0171r\u0151\n" + new string('x', 9000) + "long-body needle");
+            var first = Git(fixture, "rev-parse", "HEAD").Trim();
+            Git(fixture, "config", "user.name", "Bob");
+            Git(fixture, "config", "user.email", "bob@example.com");
+            Git(fixture, "commit", "--allow-empty", "-m", "Shared second");
+            var second = Git(fixture, "rev-parse", "HEAD").Trim();
+            Git(fixture, "checkout", "-b", "other");
+            Git(fixture, "commit", "--allow-empty", "-m", "Outside the loaded history");
+            var outside = Git(fixture, "rev-parse", "HEAD").Trim();
+            Git(fixture, "checkout", "main");
+            var commits = new QueryCommits(fixture, "HEAD").GetResultAsync().GetAwaiter().GetResult();
+            Check(Search(fixture, commits, first[..12].ToUpperInvariant()).SetEquals([first]), "SHA prefix ignores case");
+            Check(Search(fixture, commits, first.Substring(8, 14)).Count == 0, "interior SHA does not match");
+            Check(Search(fixture, commits, "ALICE").SetEquals([first]), "author name");
+            Check(Search(fixture, commits, "BOB@EXAMPLE.COM").SetEquals([second]), "author email");
+            Check(Search(fixture, commits, "alpha subject").SetEquals([first]), "subject ignores case");
+            Check(Search(fixture, commits, "body-only NEEDLE").SetEquals([first]), "full multiline message");
+            Check(Search(fixture, commits, "long-body needle").SetEquals([first]), "large message");
+            Check(Search(fixture, commits, "[brackets].").SetEquals([first]), "literal punctuation");
+            Check(Search(fixture, commits, "\u00e1rv\u00edzt\u0171r\u0151").SetEquals([first]), "Unicode");
+            Check(Search(fixture, commits, "Shared").Count == 2, "OR matching across author and message");
+            Check(Search(fixture, commits, outside).Count == 0, "only loaded history searched");
+            Check(Search(fixture, commits, "").Count == 0, "empty query");
+            Check(Search(fixture, [], "Shared").Count == 0, "empty history does not default to HEAD");
+            var batched = Enumerable.Repeat(commits[0], 256).Append(commits[1]).ToList();
+            Check(Search(fixture, batched, "body-only").SetEquals([first]), "matches beyond the first 256 entries");
+            using (var cancelled = new CancellationTokenSource())
+            {
+                cancelled.Cancel();
+                try
+                {
+                    new QueryHistoryQuickSearch(fixture, commits, "Shared", cancelled.Token).GetResultAsync().GetAwaiter().GetResult();
+                    throw new Exception("Cancelled query completed");
+                }
+                catch (OperationCanceledException) { Check(true, "cancelled query"); }
+            }
+
+            using (var cancellation = new CancellationTokenSource())
+            {
+                var manyCommits = Enumerable.Repeat(commits[0], 20000).ToList();
+                var pending = new QueryHistoryQuickSearch(fixture, manyCommits, "Shared", cancellation.Token).GetResultAsync();
+                cancellation.Cancel();
+                try
+                {
+                    pending.WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
+                    throw new Exception("Running query was not cancelled");
+                }
+                catch (OperationCanceledException) { Check(true, "running Git query cancels promptly"); }
+            }
+
+            var repo = new Repository(false, fixture, Path.Combine(fixture, ".git"));
+            var histories = new Histories(repo) { Commits = commits, IsLoading = false };
+            // Avoid unrelated detail loading; selection still drives search navigation and status.
+            typeof(Histories).GetField("_ignoreSelectionChange", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(histories, true);
+            histories.QuickSearchText = "Shared";
+            WaitFor(() => !histories.IsQuickSearching);
+            Check(histories.HasQuickSearchMatches && histories.DisplayedCommits.Count == 2, "search retains unfiltered history");
+            Check(histories.SelectedCommits.Single().SHA == second, "search selects first match automatically");
+            histories.SelectedCommits = [];
+            histories.QuickSearchNext();
+            Check(histories.SelectedCommits.Single().SHA == second, "next selects first in history order");
+            histories.QuickSearchNext();
+            Check(histories.SelectedCommits.Single().SHA == first, "next selects second match");
+            histories.QuickSearchNext();
+            Check(histories.SelectedCommits.Single().SHA == second, "next wraps");
+            histories.QuickSearchPrevious();
+            Check(histories.SelectedCommits.Single().SHA == first, "previous wraps");
+            Check(histories.QuickSearchStatus == "2 / 2", "match counter follows selection");
+            var unfilteredGraph = histories.Graph;
+            histories.QuickSearchText = "body-only";
+            WaitFor(() => !histories.IsQuickSearching);
+            Check(ReferenceEquals(unfilteredGraph, histories.Graph), "unfiltered search does not rebuild graph");
+            histories.IsQuickSearchFilterEnabled = true;
+            Check(histories.DisplayedCommits.Single().SHA == first && histories.Commits.Count == 2, "filter preserves source history");
+            histories.QuickSearchText = "second";
+            WaitFor(() => !histories.IsQuickSearching);
+            Check(histories.DisplayedCommits.Single().SHA == second, "filtered graph tolerates hidden parent");
+            histories.IsQuickSearchFilterEnabled = false;
+            Check(histories.DisplayedCommits.Count == 2, "filter toggle restores history");
+            histories.QuickSearchText = "missing";
+            histories.QuickSearchText = "Shared";
+            WaitFor(() => !histories.IsQuickSearching);
+            Check(histories.HasQuickSearchMatches, "new query wins over cancelled query");
+            histories.Commits = [commits[0]];
+            WaitFor(() => !histories.IsQuickSearching);
+            Check(histories.QuickSearchStatus.EndsWith("/ 1"), "history refresh recomputes matches");
+            histories.Commits = commits;
+            WaitFor(() => !histories.IsQuickSearching);
+
+            histories.SelectedCommits = [commits[1]];
+            var view = new HistoryView { DataContext = histories };
+            var window = new Window { Width = 1000, Height = 650, Content = view };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            WaitFor(() => !histories.IsQuickSearching);
+            view.FindControl<DataGrid>("CommitListContainer")!.Focus();
+            window.KeyPressQwerty(PhysicalKey.F, RawInputModifiers.Control);
+            var box = view.FindControl<TextBox>("QuickSearchBox")!;
+            Check(box.IsKeyboardFocusWithin, "Ctrl+F target focuses search");
+            var toolbar = view.FindControl<Border>("HistoryHeaderTools")!;
+            Check(toolbar.GetVisualDescendants().OfType<Button>().Count() == 3, "merged toolbar retains sidebar, Commit Search, and settings icons");
+            var sidebarToggle = toolbar.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.ToggleButton>()
+                .Single(button => button.Classes.Contains("sidebar_expander"));
+            var wasCollapsed = Preferences.Instance.Layout.IsSidebarCollapsedInDashboard;
+            sidebarToggle.IsChecked = !wasCollapsed;
+            Check(Preferences.Instance.Layout.IsSidebarCollapsedInDashboard != wasCollapsed, "merged sidebar toolbar toggle remains bound to its preference");
+            sidebarToggle.IsChecked = wasCollapsed;
+            var toolsPosition = toolbar.TranslatePoint(default, view)!.Value;
+            var searchPosition = box.TranslatePoint(default, view)!.Value;
+            var listPosition = view.FindControl<DataGrid>("CommitListContainer")!.TranslatePoint(default, view)!.Value;
+            Check(searchPosition.X >= toolsPosition.X + toolbar.Bounds.Width && listPosition.Y >= toolsPosition.Y + toolbar.Bounds.Height,
+                "merged toolbar icons and quick search occupy their own row without overlap");
+            window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+            Check(histories.SelectedCommits.Single().SHA == second, "Enter selects next match");
+            window.KeyPressQwerty(PhysicalKey.F3, RawInputModifiers.Shift);
+            Check(histories.SelectedCommits.Single().SHA == first, "Shift+F3 selects previous match");
+            histories.IsQuickSearchFilterEnabled = true;
+            box.Focus();
+            Dispatcher.UIThread.RunJobs();
+            var border = box.GetVisualDescendants().OfType<Border>().First(b => b.Name == "PART_BorderElement");
+            Check(histories.SelectedCommits.Single().SHA == first, "filter toggle preserves visible selection");
+            Check(border.Background is ISolidColorBrush brush && brush.Color == Color.Parse("#FFF2CC"), "focused filter box has yellow background");
+            if (args.Length > 0)
+            {
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                using var frame = window.CaptureRenderedFrame();
+                frame?.Save(args[0]);
+                Avalonia.Application.Current!.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark;
+                Dispatcher.UIThread.RunJobs();
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                using var darkFrame = window.CaptureRenderedFrame();
+                darkFrame?.Save(Path.Combine(Path.GetDirectoryName(args[0])!, "history-quick-search-dark.png"));
+            }
+            window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+            Check(histories.QuickSearchText.Length == 0 && !histories.IsQuickSearchFilterEnabled && histories.DisplayedCommits.Count == 2, "Escape clears search and restores history");
+            view.FindControl<DataGrid>("CommitListContainer")!.Focus();
+            window.KeyPressQwerty(PhysicalKey.F, RawInputModifiers.Control);
+            Check(box.IsKeyboardFocusWithin, "Ctrl+F works from commit list after clearing");
+            histories.QuickSearchText = "no such commit";
+            WaitFor(() => !histories.IsQuickSearching);
+            histories.IsQuickSearchFilterEnabled = true;
+            Check(histories.DisplayedCommits.Count == 0 && !histories.HasQuickSearchMatches, "no matches produces empty filtered history");
+            histories.ClearQuickSearch();
+            for (var i = 0; i < 60; i++)
+                Git(fixture, "commit", "--allow-empty", "-m", $"Filler {i}");
+            Git(fixture, "commit", "--allow-empty", "-m", "Body-only distant match");
+            var longHistory = new QueryCommits(fixture, "HEAD").GetResultAsync().GetAwaiter().GetResult();
+            histories.Commits = longHistory;
+            histories.SelectedCommits = [];
+            var grid = view.FindControl<DataGrid>("CommitListContainer")!;
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            grid.ScrollIntoView(longHistory[^1], null);
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            Check(!IsRowVisible(grid, longHistory[0]), "first match starts outside viewport");
+            histories.QuickSearchText = "body-only";
+            WaitFor(() => !histories.IsQuickSearching);
+            window.UpdateLayout();
+            Check(IsRowVisible(grid, longHistory[0]), "initial search scrolls first match into view");
+            histories.QuickSearchNext();
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            Check(histories.SelectedCommits.Single() == longHistory[^1] && IsRowVisible(grid, longHistory[^1]), "next scrolls distant match into view");
+            histories.QuickSearchPrevious();
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            Check(histories.SelectedCommits.Single() == longHistory[0] && IsRowVisible(grid, longHistory[0]), "previous scrolls distant match into view");
+            histories.IsQuickSearchFilterEnabled = true;
+            Check(histories.Graph.Dots.Count == 2 && histories.Graph.Dots.All(dot => dot.Center.X == 10), "filtered linear history stays in one lane across hidden commits");
+            Check(histories.Graph.Paths.Count == 1, "filtered matches share their ancestral path");
+            histories.IsQuickSearchFilterEnabled = false;
+            Check(longHistory[0].Parents.Single() == longHistory[1].SHA, "filtering preserves original parent hashes");
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            Check(IsRowVisible(grid, histories.SelectedCommits.Single()), "filter toggle keeps selected match visible");
+            CheckFilteredGraphTopology();
+            histories.ClearQuickSearch();
+            Preferences.Instance.WorkingDirectoryHeadMode = 2;
+            Dispatcher.UIThread.RunJobs();
+            Check(histories.Entries[0] == histories.WorkingDirectory && histories.Graph.Dots.Count == histories.DisplayedCommits.Count + 1,
+                "working-directory row remains available in merged unfiltered history");
+            histories.QuickSearchText = "body-only";
+            histories.IsQuickSearchFilterEnabled = true;
+            WaitFor(() => !histories.IsQuickSearching);
+            Check(!histories.Entries.Contains(histories.WorkingDirectory) && histories.Entries.Count == histories.DisplayedCommits.Count &&
+                histories.Graph.Dots.Count == histories.DisplayedCommits.Count, "filter hides working-directory row without offsetting graph dots");
+            histories.IsQuickSearchFilterEnabled = false;
+            Check(histories.Entries[0] == histories.WorkingDirectory && histories.Graph.Dots.Count == histories.DisplayedCommits.Count + 1,
+                "clearing filter restores working-directory row and its graph dot");
+            Preferences.Instance.WorkingDirectoryHeadMode = 0;
+            window.Close();
+            histories.CancelQuickSearch();
+            Console.WriteLine($"Passed {_checks} history quick search checks.");
+        }
+        finally
+        {
+            // Git object files are read-only on Windows. This fixture was created above.
+            var tempRoot = Path.GetFullPath(Path.GetTempPath());
+            if (!Path.GetFullPath(fixture).StartsWith(tempRoot, StringComparison.OrdinalIgnoreCase) ||
+                !Path.GetFileName(fixture).StartsWith("sourcegit-history-search-", StringComparison.Ordinal))
+                throw new InvalidOperationException("Unexpected fixture path");
+            foreach (var file in Directory.EnumerateFiles(fixture, "*", SearchOption.AllDirectories))
+                File.SetAttributes(file, FileAttributes.Normal);
+            Directory.Delete(fixture, true);
+        }
+    }
+
+    private static void CheckRepositoryGraph(string path, string preview)
+    {
+        var commits = new QueryCommits(path, "--branches --remotes --tags HEAD --date-order -20000").GetResultAsync().GetAwaiter().GetResult();
+        var matches = Search(path, commits, "fix:");
+        var visible = commits.FindAll(c => matches.Contains(c.SHA));
+        var full = CommitGraph.Generate(commits, false, CommitGraphHighlighting.All, []);
+        var filtered = CommitGraph.GenerateFiltered(commits, visible, false, CommitGraphHighlighting.All, []);
+        var fullWidth = full.Dots.Max(dot => dot.Center.X);
+        var filteredWidth = filtered.Dots.Max(dot => dot.Center.X);
+        Console.WriteLine($"Repository: {commits.Count} commits, {visible.Count} matches; full width {fullWidth}, filtered width {filteredWidth}");
+        if (preview != null)
+        {
+            var repo = new Repository(false, path, Path.Combine(path, ".git"));
+            var histories = new Histories(repo) { Commits = commits, IsLoading = false, IsCollapseDetails = true };
+            typeof(Histories).GetField("_ignoreSelectionChange", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(histories, true);
+            var view = new HistoryView { DataContext = histories };
+            var window = new Window { Width = 1600, Height = 1000, Content = view };
+            Application.Current!.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark;
+            window.Show();
+            histories.QuickSearchText = "fix:";
+            histories.IsQuickSearchFilterEnabled = true;
+            WaitFor(() => !histories.IsQuickSearching);
+            window.UpdateLayout();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            using var frame = window.CaptureRenderedFrame();
+            frame!.Save(preview);
+            histories.SelectedCommits = [histories.DisplayedCommits[^1]];
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            using var bottom = window.CaptureRenderedFrame();
+            bottom!.Save(Path.Combine(Path.GetDirectoryName(preview)!, Path.GetFileNameWithoutExtension(preview) + "-bottom.png"));
+            window.Close();
+            histories.CancelQuickSearch();
+        }
+        Check(filteredWidth <= fullWidth + 12, "real repository filtered graph does not grow phantom lanes");
+    }
+
+    private static void CheckFilteredGraphTopology()
+    {
+        var root = new Commit { SHA = "root" };
+        var left = new Commit { SHA = "left", Parents = [root.SHA] };
+        var right = new Commit { SHA = "right", Parents = [root.SHA] };
+        var hiddenMerge = new Commit { SHA = "hidden-merge", Parents = [left.SHA, right.SHA] };
+        var tip = new Commit { SHA = "tip", Parents = [hiddenMerge.SHA] };
+        var all = new List<Commit> { tip, hiddenMerge, left, right, root };
+        var graph = CommitGraph.GenerateFiltered(all, [tip, left, right, root], false, CommitGraphHighlighting.All, []);
+        Check(graph.Dots.Count == 4 && graph.Paths.Count == 2, "hidden merge retains both visible parent paths");
+        Check(graph.Dots.Max(dot => dot.Center.X) <= 22, "hidden merge does not create extra lanes");
+        graph = CommitGraph.GenerateFiltered(all, [tip, right], true, CommitGraphHighlighting.All, []);
+        Check(graph.Paths.Count == 0, "first-parent mode does not connect through a hidden second parent");
+        graph = CommitGraph.GenerateFiltered(all, [tip], false, CommitGraphHighlighting.All, []);
+        Check(graph.Paths.Count == 0 && graph.Dots.Single().Center.X == 10, "no dangling paths for ancestors without visible matches");
+        Check(hiddenMerge.Parents.SequenceEqual([left.SHA, right.SHA]), "projecting hidden merges preserves original ancestry");
+        var chain = Enumerable.Range(0, 200).Select(i => new Commit { SHA = $"visible-{i}" }).ToList();
+        for (var i = 0; i < chain.Count - 1; i++)
+            chain[i].Parents = [chain[i + 1].SHA];
+        var hidden = Enumerable.Range(0, chain.Count).Select(i => new Commit { SHA = $"merge-{i}" }).ToList();
+        for (var i = 0; i < hidden.Count; i++)
+            hidden[i].Parents = i + 1 < hidden.Count ? [hidden[i + 1].SHA, chain[i].SHA] : [chain[i].SHA];
+        var mergeTip = new Commit { SHA = "merge-tip", Parents = [hidden[0].SHA] };
+        var mergedHistory = new List<Commit> { mergeTip };
+        mergedHistory.AddRange(hidden);
+        mergedHistory.AddRange(chain);
+        var mergedVisible = new List<Commit> { mergeTip };
+        mergedVisible.AddRange(chain);
+        graph = CommitGraph.GenerateFiltered(mergedHistory, mergedVisible, false, CommitGraphHighlighting.All, []);
+        Check(graph.Paths.Count == 1 && graph.Dots.All(dot => dot.Center.X == 10), "hidden merges do not connect redundantly to every visible ancestor");
+        Check(chain[0].Parents.Single() == chain[1].SHA && hidden[0].Parents.Count == 2, "removing redundant graph edges preserves real commit parents");
+
+        var sparse = Enumerable.Range(0, 600).Select(i => new Commit { SHA = $"commit-{i}", Parents = [$"commit-{i + 1}"] }).ToList();
+        var visible = sparse.Where((_, i) => i % 3 == 0).ToList();
+        graph = CommitGraph.GenerateFiltered(sparse, visible, false, CommitGraphHighlighting.All, []);
+        Check(graph.Paths.Count == 1 && graph.Dots.All(dot => dot.Center.X == 10), "hundreds of sparse matches do not accumulate phantom branches");
+        graph = CommitGraph.Generate(sparse, false, CommitGraphHighlighting.All, []);
+        Check(graph.Dots.Count == sparse.Count && graph.Dots.All(dot => dot.Center.X == 10), "unfiltered graph retains original topology");
+    }
+
+    private static HashSet<string> Search(string repo, List<Commit> commits, string filter) =>
+        new QueryHistoryQuickSearch(repo, commits, filter, CancellationToken.None).GetResultAsync().GetAwaiter().GetResult();
+
+    private static bool IsRowVisible(DataGrid grid, Commit commit)
+    {
+        var presenter = grid.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.DataGridRowsPresenter>().First();
+        return presenter.GetVisualDescendants().OfType<DataGridRow>().Any(row =>
+        {
+            var position = row.TranslatePoint(default, presenter);
+            return row.DataContext == commit && row.IsVisible && position.HasValue &&
+                position.Value.Y >= -0.5 && position.Value.Y + row.Bounds.Height <= presenter.Bounds.Height + 0.5;
+        });
+    }
+
+    private static void WaitFor(Func<bool> condition)
+    {
+        var timer = Stopwatch.StartNew();
+        while (!condition())
+        {
+            if (timer.Elapsed > TimeSpan.FromSeconds(15))
+                throw new Exception("Timed out waiting for search");
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(10);
+        }
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    private static void Check(bool condition, string label)
+    {
+        if (!condition)
+            throw new Exception(label);
+        _checks++;
+        Console.WriteLine("PASS " + label);
+    }
+
+    private static string Git(string cwd, params string[] args)
+    {
+        var start = new ProcessStartInfo("git") { WorkingDirectory = cwd, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var arg in args)
+            start.ArgumentList.Add(arg);
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+            throw new Exception(error);
+        return output;
+    }
+}

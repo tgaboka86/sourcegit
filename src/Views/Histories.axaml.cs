@@ -146,7 +146,7 @@ namespace SourceGit.Views
         {
             base.OnSelectionChanged(e);
 
-            if (_ignoreSelectionChanged || DataContext is ViewModels.Histories { IsUpdatingEntries: true })
+            if (_ignoreSelectionChanged || DataContext is ViewModels.Histories { IsUpdatingEntries: true } or ViewModels.Histories { IsUpdatingQuickSearchFilter: true })
                 return;
 
             if (ItemsSource is not IList<object> items)
@@ -221,7 +221,7 @@ namespace SourceGit.Views
             else if (e.KeyModifiers.HasFlag(OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control) &&
                 e.Key == Key.A && DataContext is ViewModels.Histories histories)
             {
-                histories.SelectedCommits = new List<Models.Commit>(histories.Commits);
+                histories.SelectedCommits = new List<Models.Commit>(histories.DisplayedCommits);
                 e.Handled = true;
             }
             else if (e.KeyModifiers.HasFlag(OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control) &&
@@ -344,6 +344,48 @@ namespace SourceGit.Views
             InitializeComponent();
             CommitListContainer.Columns[1].PropertyChanged += OnAuthorColumnPropertyChanged;
             CommitListContainer.Columns[5].PropertyChanged += OnBranchesColumnPropertyChanged;
+            AddHandler(KeyDownEvent, OnQuickSearchKeyDown, RoutingStrategies.Tunnel);
+            Loaded += (_, _) => (DataContext as ViewModels.Histories)?.ResumeQuickSearch();
+            Unloaded += (_, _) => (DataContext as ViewModels.Histories)?.CancelQuickSearch();
+        }
+
+        public void FocusQuickSearch()
+        {
+            QuickSearchBox.Focus();
+            QuickSearchBox.SelectAll();
+        }
+
+        private void OnQuickSearchKeyDown(object sender, KeyEventArgs e)
+        {
+            if (DataContext is not ViewModels.Histories vm)
+                return;
+
+            if (!QuickSearchBox.IsKeyboardFocusWithin &&
+                e.Source is Visual source && source != CommitListContainer && !CommitListContainer.IsVisualAncestorOf(source))
+                return;
+
+            var command = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
+            if (e.Key == Key.F && e.KeyModifiers == command)
+            {
+                FocusQuickSearch();
+                e.Handled = true;
+            }
+            else if ((e.Key == Key.F3 && (e.KeyModifiers == KeyModifiers.None || e.KeyModifiers == KeyModifiers.Shift)) ||
+                     (e.Key == Key.Enter && QuickSearchBox.IsKeyboardFocusWithin &&
+                      (e.KeyModifiers == KeyModifiers.None || e.KeyModifiers == KeyModifiers.Shift)))
+            {
+                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                    vm.QuickSearchPrevious();
+                else
+                    vm.QuickSearchNext();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape && (!string.IsNullOrEmpty(vm.QuickSearchText) || vm.IsQuickSearchFilterEnabled))
+            {
+                vm.ClearQuickSearch();
+                CommitListContainer.Focus();
+                e.Handled = true;
+            }
         }
 
         public async Task GotoParent()
@@ -909,23 +951,6 @@ namespace SourceGit.Views
             }
             if (Math.Abs(CommitGraph.Margin.Left - graphOffset) > 0.01)
                 CommitGraph.Margin = new Thickness(graphOffset, 24, 0, 0);
-
-            // Keep the tools at the left edge and reserve space in the first visible header.
-            DataGridColumn firstColumn = null;
-            foreach (var column in dataGrid.Columns)
-            {
-                if (column.IsVisible && (firstColumn == null || column.DisplayIndex < firstColumn.DisplayIndex))
-                    firstColumn = column;
-            }
-            foreach (var column in dataGrid.Columns)
-            {
-                if (column.Header is Control header)
-                {
-                    var margin = column == firstColumn ? new Thickness(HistoryHeaderTools.Width, 0, 0, 0) : default;
-                    if (header.Margin != margin)
-                        header.Margin = margin;
-                }
-            }
 
             var branchesColumn = dataGrid.Columns[5];
             var branchesRight = branchesColumn.ActualWidth;

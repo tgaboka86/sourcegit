@@ -88,9 +88,20 @@ internal static class Program
         {
             window?.Close();
             repo?.Close();
-            foreach (var file in Directory.EnumerateFiles(fixture, "*", SearchOption.AllDirectories))
-                File.SetAttributes(file, FileAttributes.Normal);
-            Directory.Delete(fixture, true);
+            for (var attempt = 0; attempt < 10; attempt++)
+            {
+                try
+                {
+                    if (!Path.GetFullPath(fixture).StartsWith(Path.GetFullPath(Path.GetTempPath()), StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("Fixture must stay inside the temporary directory");
+                    foreach (var file in Directory.EnumerateFiles(fixture, "*", SearchOption.AllDirectories))
+                        File.SetAttributes(file, FileAttributes.Normal);
+                    Directory.Delete(fixture, true);
+                    break;
+                }
+                catch (IOException) when (attempt < 9) { Thread.Sleep(50); }
+                catch (UnauthorizedAccessException) when (attempt < 9) { Thread.Sleep(50); }
+            }
         }
     }
 
