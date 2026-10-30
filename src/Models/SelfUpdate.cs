@@ -20,6 +20,18 @@ namespace SourceGit.Models
         [JsonPropertyName("body")]
         public string Body { get; set; }
 
+        [JsonPropertyName("draft")]
+        public bool IsDraft { get; set; }
+
+        [JsonPropertyName("prerelease")]
+        public bool IsPrerelease { get; set; }
+
+        [JsonIgnore]
+        public string ReleaseNotes { get; set; }
+
+        [JsonIgnore]
+        public bool ReleaseHistoryUnavailable { get; set; }
+
         [JsonPropertyName("assets")]
         public ReleaseAsset[] Assets { get; set; } = [];
 

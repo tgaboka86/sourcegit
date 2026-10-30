@@ -61,7 +61,7 @@
                 <Run Text="{Binding ReleaseDateStr, Mode=OneWay}"/>
               </TextBlock>
 
-              <Border Width="500" MaxHeight="400"
+              <Border Width="500" Height="320"
                       Margin="0,8,0,0"
                       Background="{DynamicResource Brush.Contents}"
                       BorderThickness="1"
@@ -70,20 +70,26 @@
               </Border>
 
               <StackPanel Margin="0,8,0,0" Orientation="Horizontal" HorizontalAlignment="Center">
-                <Button Classes="flat primary"
+                <Button Classes="flat"
                         Height="30"
-                        Click="GotoDownload"
+                        Click="OpenReleaseInBrowser"
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center">
+                  <StackPanel Orientation="Horizontal">
+                    <Path Width="12" Height="12" Data="{StaticResource Icons.Remotes}"/>
+                    <TextBlock Text="{DynamicResource Text.SelfUpdate.OpenBrowser}" Margin="8,0,0,0"/>
+                  </StackPanel>
+                </Button>
+
+                <Button Classes="flat primary" Height="30" Margin="8,0,0,0"
+                        IsVisible="{Binding CanInstall}" Click="DownloadAndInstall"
                         HorizontalContentAlignment="Center"
                         VerticalContentAlignment="Center">
                   <StackPanel Orientation="Horizontal">
                     <Path Width="12" Height="12" Data="{StaticResource Icons.Pull}" Fill="{DynamicResource AccentButtonForeground}"/>
-                    <TextBlock Text="{DynamicResource Text.SelfUpdate.OpenBrowser}" Margin="8,0,0,0" Foreground="{DynamicResource AccentButtonForeground}"/>
+                    <TextBlock Text="{DynamicResource Text.SelfUpdate.Install}" Margin="8,0,0,0" Foreground="{DynamicResource AccentButtonForeground}"/>
                   </StackPanel>
                 </Button>
-
-                <Button Classes="flat" Height="30" Margin="8,0,0,0"
-                        IsVisible="{Binding CanInstall}" Click="DownloadAndInstall"
-                        Content="{DynamicResource Text.SelfUpdate.Install}"/>
 
                 <Button Classes="flat"
                         Height="30"
@@ -92,7 +98,7 @@
                         HorizontalContentAlignment="Center"
                         VerticalContentAlignment="Center">
                   <StackPanel Orientation="Horizontal">
-                    <Path Width="12" Height="12" Data="{StaticResource Icons.File.Ignore}"/>
+                    <Path Width="12" Height="12" Data="{StaticResource Icons.FastForward}"/>
                     <TextBlock Text="{DynamicResource Text.SelfUpdate.IgnoreThisVersion}" Margin="8,0,0,0"/>
                   </StackPanel>
                 </Button>

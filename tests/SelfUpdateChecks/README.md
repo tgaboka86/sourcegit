@@ -1,7 +1,8 @@
 # Self-update checks
 
 Run `dotnet run --project tests/SelfUpdateChecks` for release parsing, normalized
-version comparison, SHA-256 verification, tampered/missing hash rejection, and cancellation.
+version comparison, cumulative release notes (ordering, filtering, deduplication and
+GitHub pagination), SHA-256 verification, tampered/missing hash rejection, and cancellation.
 
 On Windows, run `pwsh -File tests/SelfUpdateChecks/InstallerChecks.ps1` to exercise
 the actual installer against isolated fixtures: replacement, user data preservation,

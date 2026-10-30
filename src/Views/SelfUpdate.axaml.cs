@@ -26,6 +26,7 @@ namespace SourceGit.Views
             TextArea.TextView.Margin = new Thickness(4, 0);
             TextArea.TextView.Options.EnableHyperlinks = false;
             TextArea.TextView.Options.EnableEmailHyperlinks = false;
+            TextArea.TextView.Options.AllowScrollBelowDocument = false;
         }
 
         protected override void OnLoaded(RoutedEventArgs e)
@@ -57,7 +58,9 @@ namespace SourceGit.Views
             base.OnDataContextChanged(e);
 
             if (DataContext is Models.Version ver)
-                Text = ver.Body;
+                Text = ver.ReleaseHistoryUnavailable
+                    ? $"{App.Text("SelfUpdate.ReleaseHistoryUnavailable")}\n\n{ver.Body}"
+                    : ver.ReleaseNotes ?? ver.Body;
         }
 
         private TextMate.Installation _textMate = null;
@@ -76,7 +79,7 @@ namespace SourceGit.Views
             Close();
         }
 
-        private void GotoDownload(object sender, RoutedEventArgs e)
+        private void OpenReleaseInBrowser(object sender, RoutedEventArgs e)
         {
             if (sender is Button { DataContext: Models.Version ver })
                 Native.OS.OpenBrowser(ver.ReleaseUrl);
