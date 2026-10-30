@@ -1047,24 +1047,15 @@ namespace SourceGit.Views
             menu.Items.Add(createBranch);
             menu.Items.Add(createTag);
 
-            if (upstream != null)
+            var azureCreatePR = AzureDevOpsPullRequestMenu.Create(this, repo, branch);
+            if (azureCreatePR != null)
+            {
+                menu.Items.Add(azureCreatePR);
+            }
+            else if (upstream != null)
             {
                 var remote = repo.Remotes.Find(x => x.Name.Equals(upstream.Remote, StringComparison.Ordinal));
-                if (remote != null && AzureDevOps.RemoteAddress.TryParse(remote.URL, out _))
-                {
-                    var createPR = new MenuItem { Header = App.Text("BranchCM.CreatePRForUpstream", upstream.FriendlyName), Icon = this.CreateMenuIcon("Icons.CreatePR") };
-                    createPR.IsEnabled = branch.Ahead.Count == 0 && branch.Behind.Count == 0 && !branch.IsUpstreamGone;
-                    if (!createPR.IsEnabled)
-                        createPR.Header = App.Text("CreatePR.PushFirst");
-                    ToolTip.SetTip(createPR, App.Text("CreatePR.PublishedOnly"));
-                    createPR.Click += async (_, e) =>
-                    {
-                        e.Handled = true;
-                        await this.ShowDialogAsync(new ViewModels.CreatePullRequest(repo, remote, upstream, branch));
-                    };
-                    menu.Items.Add(createPR);
-                }
-                else if (remote != null && remote.TryGetCreatePullRequestURL(out var prURL, upstream.Name))
+                if (remote != null && remote.TryGetCreatePullRequestURL(out var prURL, upstream.Name))
                 {
                     var createPR = new MenuItem();
                     createPR.Header = App.Text("BranchCM.CreatePRForUpstream", upstream.FriendlyName);
@@ -1077,10 +1068,6 @@ namespace SourceGit.Views
 
                     menu.Items.Add(createPR);
                 }
-            }
-            else if (repo.Remotes.Exists(x => AzureDevOps.RemoteAddress.TryParse(x.URL, out _)))
-            {
-                menu.Items.Add(new MenuItem { Header = App.Text("CreatePR.PushFirst"), Icon = this.CreateMenuIcon("Icons.CreatePR"), IsEnabled = false });
             }
             menu.Items.Add(new MenuItem() { Header = "-" });
             TryToAddCustomActionsToBranchContextMenu(repo, menu, branch);
@@ -1392,16 +1379,10 @@ namespace SourceGit.Views
             menu.Items.Add(createTag);
 
             var remote = repo.Remotes.Find(x => x.Name.Equals(branch.Remote, StringComparison.Ordinal));
-            if (remote != null && AzureDevOps.RemoteAddress.TryParse(remote.URL, out _))
+            var azureCreatePR = AzureDevOpsPullRequestMenu.Create(this, repo, branch);
+            if (azureCreatePR != null)
             {
-                var createPR = new MenuItem { Header = App.Text("BranchCM.CreatePR"), Icon = this.CreateMenuIcon("Icons.CreatePR") };
-                createPR.Click += async (_, e) =>
-                {
-                    e.Handled = true;
-                    var local = repo.Branches.Find(x => x.IsLocal && x.Upstream == branch.FullName);
-                    await this.ShowDialogAsync(new ViewModels.CreatePullRequest(repo, remote, branch, local));
-                };
-                menu.Items.Add(createPR);
+                menu.Items.Add(azureCreatePR);
             }
             else if (remote != null && remote.TryGetCreatePullRequestURL(out var prURL, branch.Name))
             {

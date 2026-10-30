@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Web;
@@ -47,6 +48,7 @@ internal static class Program
             git.ArgumentList.Add("-b");
             git.ArgumentList.Add("main");
             using (var process = Process.Start(git)) process.WaitForExit();
+            CheckBranchMenus(fixture);
             CheckDialog(fixture, args.Contains("--render"));
         }
         finally
@@ -74,6 +76,71 @@ internal static class Program
         foreach (var url in new[] { "https://dev.azure.com.evil.invalid/o/p/_git/r", "https://evilazure.com/o/p/_git/r", "http://dev.azure.com/o/p/_git/r", "https://dev.azure.com:8443/o/p/_git/r", "https://github.com/o/r", "https://dev.azure.com/o/p/_git/r?token=secret", "https://dev.azure.com/o/p/_git/a%2Fb" })
             Check(!RemoteAddress.TryParse(url, out _), "reject unsupported destination");
         Check(RemoteAddress.TryParse("https://dev.azure.com/o/My%20Project/_git/My%20Repo", out var escaped) && escaped.Project == "My Project" && escaped.RepositoryApi.Contains("My%20Repo"), "escape path components once");
+    }
+
+    private static void CheckBranchMenus(string fixture)
+    {
+        var configPath = Path.Combine(fixture, ".git", "config");
+        var originalConfig = File.ReadAllText(configPath);
+        var repo = new Repository(false, fixture, Path.Combine(fixture, ".git"));
+        var local = new SourceGit.Models.Branch { IsLocal = true, IsCurrent = true, Name = "feature/widgets", FullName = Source, Head = new('a', 40) };
+        var published = new SourceGit.Models.Branch { Name = local.Name, FullName = "refs/remotes/origin/feature/widgets", Remote = "origin", Head = local.Head };
+        var remote = new SourceGit.Models.Remote { Name = "origin", URL = Address.WebUrl };
+        repo.Branches.AddRange([local, published]);
+        repo.Remotes.Add(remote);
+        typeof(Repository).GetField("_currentBranch", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(repo, local);
+        var tree = new SourceGit.Views.BranchTree();
+        var history = new SourceGit.Views.Histories();
+
+        MenuItem Item(SourceGit.Models.Branch branch) => SourceGit.Views.AzureDevOpsPullRequestMenu.Create(tree, repo, branch);
+        static MenuItem FindItem(IEnumerable<object> items)
+        {
+            foreach (var item in items.OfType<MenuItem>())
+            {
+                if (item.Name == "CreateAzureDevOpsPullRequest") return item;
+                var nested = FindItem(item.Items);
+                if (nested != null) return nested;
+            }
+            return null;
+        }
+
+        Check(string.IsNullOrEmpty(local.Upstream) && Item(local) is { IsEnabled: true }, "published local branch without upstream enables Create PR");
+        Check(Item(published) is { IsEnabled: true }, "remote context resolves the untracked local counterpart");
+        var localMenuMethod = typeof(SourceGit.Views.BranchTree).GetMethod("CreateContextMenuForLocalBranch", BindingFlags.Instance | BindingFlags.NonPublic);
+        var localMenu = (ContextMenu)localMenuMethod.Invoke(tree, [repo, local]);
+        Check(FindItem(localMenu.Items) is { IsEnabled: true }, "sidebar local context exposes Create PR without upstream");
+        Check(FindItem(tree.CreateContextMenuForRemoteBranch(repo, published).Items) is { IsEnabled: true }, "sidebar remote context exposes Create PR");
+
+        foreach (var method in new[] { "FillCurrentBranchMenu", "FillOtherLocalBranchMenu", "FillRemoteBranchMenu" })
+        {
+            var menu = new ContextMenu();
+            object[] arguments = method == "FillCurrentBranchMenu" ? [menu, repo, local] : [menu, repo, method == "FillRemoteBranchMenu" ? published : local, local, false];
+            typeof(SourceGit.Views.Histories).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(history, arguments);
+            Check(FindItem(menu.Items) is { IsEnabled: true }, "history branch submenu exposes Create PR: " + method);
+        }
+
+        local.Head = new('b', 40);
+        Check(Item(local) is { IsEnabled: false }, "local commits not yet published keep Create PR disabled");
+        Check(Item(published) is { IsEnabled: false }, "remote context also checks an untracked local counterpart");
+        local.Head = published.Head;
+        published.Name = "different-name";
+        Check(Item(local) is { IsEnabled: false }, "matching commit alone does not infer the destination");
+        published.Name = local.Name;
+
+        var secondRemote = new SourceGit.Models.Remote { Name = "mirror", URL = "https://dev.azure.com/another-org/sample-project/_git/sample-repo" };
+        var secondBranch = new SourceGit.Models.Branch { Name = local.Name, FullName = "refs/remotes/mirror/feature/widgets", Remote = "mirror", Head = local.Head };
+        repo.Remotes.Add(secondRemote);
+        repo.Branches.Add(secondBranch);
+        Check(Item(local) is { IsEnabled: false } ambiguous && Equals(ambiguous.Header, App.Text("CreatePR.SelectPublishedBranch")), "multiple matching remotes require explicit choice");
+        Check(Item(published) is { IsEnabled: true }, "explicit remote branch resolves ambiguity");
+        local.Upstream = published.FullName;
+        Check(Item(local) is { IsEnabled: true }, "configured upstream takes precedence over other matches");
+        local.IsDetachedHead = true;
+        Check(Item(local) == null, "detached HEAD has no branch PR action");
+        local.IsDetachedHead = false;
+        remote.URL = "https://github.com/example/sample-repo.git";
+        Check(Item(local) == null, "non-Azure upstream keeps its existing provider menu");
+        Check(File.ReadAllText(configPath) == originalConfig, "resolving menus does not change Git tracking configuration");
     }
 
     private static CreateRequest Request(bool draft = false) => new()

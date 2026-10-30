@@ -37,6 +37,7 @@
   <x:String x:Key="Text.CreatePR.Help.Message">The message for the single commit added to the target branch.</x:String>
   <x:String x:Key="Text.CreatePR.PublishedOnly">Push and synchronize the source branch before creating a PR. Uncommitted changes are not included.</x:String>
   <x:String x:Key="Text.CreatePR.PushFirst">Create PR — push or synchronize the branch first</x:String>
+  <x:String x:Key="Text.CreatePR.SelectPublishedBranch">Create PR — select the intended branch under Remotes</x:String>
   <x:String x:Key="Text.CreatePR.OpenRepository">Open pull requests in Azure DevOps</x:String>
   <x:String x:Key="Text.CreatePR.RecoveryAcknowledged">I have checked this creation attempt in Azure DevOps.</x:String>
   <x:String x:Key="Text.CreatePR.ClearRecovery">Clear the recovery record</x:String>

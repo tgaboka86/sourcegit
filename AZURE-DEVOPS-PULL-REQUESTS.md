@@ -1,6 +1,8 @@
 # Azure DevOps pull requests
 
-SourceGit can create pull requests directly in Azure DevOps Services. Right-click a published local branch with an upstream, or a remote branch, and choose **Create Pull Request**. Other hosting providers retain their existing browser workflow.
+SourceGit can create pull requests directly in Azure DevOps Services. Right-click a published local or remote branch in the sidebar and choose **Create Pull Request**. In the history graph, the action is available inside the branch-name submenu. Other hosting providers retain their existing browser workflow.
+
+A local branch does not need an upstream setting when exactly one supported remote branch has the same name and commit. When several remotes match, choose the intended branch under **Remotes** explicitly. SourceGit never changes tracking settings to create a PR.
 
 Push the source branch through the ordinary Git workflow first. SourceGit checks the server ref before creation and verifies a corresponding local branch against it. The dialog does not push, commit, rebase, or configure tracking. Uncommitted changes are not included.
 

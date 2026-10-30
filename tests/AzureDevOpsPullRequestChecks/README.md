@@ -1,6 +1,6 @@
 # Azure DevOps pull request checks
 
-These executable regression checks cover remote parsing, published-source validation, request payloads, required and optional reviewers, draft/manual/automatic completion, duplicate detection, partial and uncertain creation outcomes, recovery persistence, account-scoped defaults, and native dialog behavior.
+These executable regression checks cover remote parsing, published-source validation, sidebar and history menus (including published branches without an upstream and ambiguous remotes), request payloads, required and optional reviewers, draft/manual/automatic completion, duplicate detection, partial and uncertain creation outcomes, recovery persistence, account-scoped defaults, and native dialog behavior.
 
 The HTTP handler and authentication provider are synthetic. The checks use a temporary local Git repository and temporary preferences, and make no live Azure DevOps requests. No user account or application registration is required.
 
