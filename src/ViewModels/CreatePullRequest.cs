@@ -210,7 +210,8 @@ namespace SourceGit.ViewModels
                 if (_auth is not PersonalAccessTokenAuthentication || !string.IsNullOrWhiteSpace(PersonalAccessToken))
                 {
                     _auth?.Dispose();
-                    try { _auth = await _personalAccessTokenFactory(_address.Organization, PersonalAccessToken); }
+                    try
+                    { _auth = await _personalAccessTokenFactory(_address.Organization, PersonalAccessToken); }
                     finally { PersonalAccessToken = string.Empty; }
                 }
             }

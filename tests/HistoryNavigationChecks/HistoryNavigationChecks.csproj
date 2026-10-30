@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../src/Models/Watcher.cs" Link="Watcher.cs" />
-    <Compile Include="../../src/Models/IRepository.cs" Link="IRepository.cs" />
+    <ProjectReference Include="../../src/SourceGit.csproj" />
+    <PackageReference Include="Avalonia.Headless" Version="11.3.22" />
   </ItemGroup>
 </Project>

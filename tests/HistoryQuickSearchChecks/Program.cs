@@ -145,7 +145,7 @@ internal static class Program
             var box = view.FindControl<TextBox>("QuickSearchBox")!;
             Check(box.IsKeyboardFocusWithin, "Ctrl+F target focuses search");
             var toolbar = view.FindControl<Border>("HistoryHeaderTools")!;
-            Check(toolbar.GetVisualDescendants().OfType<Button>().Count() == 3, "merged toolbar retains sidebar, Commit Search, and settings icons");
+            Check(toolbar.GetVisualDescendants().OfType<Button>().Count() == 6, "merged toolbar retains sidebar, Commit Search, settings, and navigation icons");
             var sidebarToggle = toolbar.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.ToggleButton>()
                 .Single(button => button.Classes.Contains("sidebar_expander"));
             var wasCollapsed = Preferences.Instance.Layout.IsSidebarCollapsedInDashboard;

@@ -647,6 +647,9 @@
   <x:String x:Key="Text.GitLFS.TrackByExtension" xml:space="preserve">Track all *{0} files</x:String>
   <x:String x:Key="Text.GotoRevisionSelector" xml:space="preserve">Select Commit</x:String>
   <x:String x:Key="Text.Histories.AdvancedOptions" xml:space="preserve">Advanced Options</x:String>
+  <x:String x:Key="Text.Histories.NavigateBack" xml:space="preserve">Back</x:String>
+  <x:String x:Key="Text.Histories.NavigateForward" xml:space="preserve">Forward</x:String>
+  <x:String x:Key="Text.Histories.NavigateHome" xml:space="preserve">Go to current HEAD</x:String>
   <x:String x:Key="Text.Histories.Header.Author" xml:space="preserve">AUTHOR</x:String>
   <x:String x:Key="Text.Histories.Header.AuthorTime" xml:space="preserve">AUTHOR TIME</x:String>
   <x:String x:Key="Text.Histories.Header.Branches" xml:space="preserve">BRANCHES</x:String>
@@ -844,7 +847,6 @@
   <x:String x:Key="Text.Preferences.General.EnableCompactFolders" xml:space="preserve">Enable compact folders in changes tree</x:String>
   <x:String x:Key="Text.Preferences.General.Locale" xml:space="preserve">Language</x:String>
   <x:String x:Key="Text.Preferences.General.MaxHistoryCommits" xml:space="preserve">History Commits</x:String>
-  <x:String x:Key="Text.Preferences.General.RefreshThrottling" xml:space="preserve">Refresh throttling</x:String>
   <x:String x:Key="Text.Preferences.General.ShowChangesPageByDefault" xml:space="preserve">Show `LOCAL CHANGES` page by default</x:String>
   <x:String x:Key="Text.Preferences.General.ShowChangesTabInCommitDetailByDefault" xml:space="preserve">Show `CHANGES` tab in commit detail by default</x:String>
   <x:String x:Key="Text.Preferences.General.ShowRelativeTimeInGraph" xml:space="preserve">Show relative time in commit graph</x:String>
@@ -967,6 +969,11 @@
   <x:String x:Key="Text.Repository.FilterCommits.Expand" xml:space="preserve">Expand Filters</x:String>
   <x:String x:Key="Text.Repository.FilterCommits.Include" xml:space="preserve">Filter in commit graph</x:String>
   <x:String x:Key="Text.Repository.FilterCommits.Summary" xml:space="preserve">filter(s) enabled</x:String>
+  <x:String x:Key="Text.Repository.FocusOnCurrentBranch" xml:space="preserve">Focus on Current Branch
+
+When this is toggled, all history filters will be cleared. And only commits belong to the current branch or its upstream (if it has one) will be listed in `Dashboard` page.
+
+Manually add a branch/tag history filter will disable this feature automatically.</x:String>
   <x:String x:Key="Text.Repository.HistoriesLayout" xml:space="preserve">LAYOUT</x:String>
   <x:String x:Key="Text.Repository.HistoriesLayout.Horizontal" xml:space="preserve">Horizontal</x:String>
   <x:String x:Key="Text.Repository.HistoriesLayout.Vertical" xml:space="preserve">Vertical</x:String>
@@ -1038,6 +1045,15 @@
   <x:String x:Key="Text.ScanRepositories.UseCustomDir" xml:space="preserve">Scan another custom directory</x:String>
   <x:String x:Key="Text.SelfUpdate" xml:space="preserve">Check for Updates...</x:String>
   <x:String x:Key="Text.SelfUpdate.Available" xml:space="preserve">New version of this software is available: </x:String>
+  <x:String x:Key="Text.SelfUpdate.BrowserOnly" xml:space="preserve">In-app installation requires a Windows package for this architecture with a SHA-256 digest. Use the browser to download other packages.</x:String>
+  <x:String x:Key="Text.SelfUpdate.Cancelled" xml:space="preserve">Download cancelled.</x:String>
+  <x:String x:Key="Text.SelfUpdate.ConfirmInstall" xml:space="preserve">SHA-256 verified. Install this update and restart SourceGit? Finish any running Git operations before continuing. Installation directory:</x:String>
+  <x:String x:Key="Text.SelfUpdate.Downloading" xml:space="preserve">Downloading and verifying update…</x:String>
+  <x:String x:Key="Text.SelfUpdate.Install" xml:space="preserve">Download and install…</x:String>
+  <x:String x:Key="Text.SelfUpdate.InstallFailed" xml:space="preserve">Installation failed:</x:String>
+  <x:String x:Key="Text.SelfUpdate.OpenBrowser" xml:space="preserve">Open in browser</x:String>
+  <x:String x:Key="Text.SelfUpdate.ReleaseHistoryUnavailable" xml:space="preserve">Could not load intermediate release notes. Only the latest release notes are shown. Check again or open the releases in your browser.</x:String>
+  <x:String x:Key="Text.SelfUpdate.Verified" xml:space="preserve">SHA-256 verified. Ready to install.</x:String>
   <x:String x:Key="Text.SelfUpdate.CurrentVersion" xml:space="preserve">Current Version: </x:String>
   <x:String x:Key="Text.SelfUpdate.Error" xml:space="preserve">Check for updates failed!</x:String>
   <x:String x:Key="Text.SelfUpdate.GotoDownload" xml:space="preserve">Download</x:String>

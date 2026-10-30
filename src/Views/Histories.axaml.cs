@@ -139,6 +139,8 @@ namespace SourceGit.Views
                 ApplySelection();
                 if (change.NewValue is List<Models.Commit> { Count: 1 } selected)
                     ScrollIntoView(selected[0], null);
+                else if (DataContext is ViewModels.Histories { IsWorkingDirectorySelected: true } histories)
+                    ScrollIntoView(histories.WorkingDirectory, null);
             }
         }
 
@@ -345,6 +347,9 @@ namespace SourceGit.Views
             CommitListContainer.Columns[1].PropertyChanged += OnAuthorColumnPropertyChanged;
             CommitListContainer.Columns[5].PropertyChanged += OnBranchesColumnPropertyChanged;
             AddHandler(KeyDownEvent, OnQuickSearchKeyDown, RoutingStrategies.Tunnel);
+            AddHandler(KeyDownEvent, OnNavigationKeyDown, RoutingStrategies.Tunnel);
+            Loaded += (_, _) => (DataContext as ViewModels.Histories)?.ResumeNavigationVisits();
+            Unloaded += (_, _) => (DataContext as ViewModels.Histories)?.SuspendNavigationVisits();
             Loaded += OnQuickSearchLoaded;
             Unloaded += OnQuickSearchUnloaded;
         }
@@ -398,6 +403,29 @@ namespace SourceGit.Views
                 vm.ClearQuickSearch();
                 CommitListContainer.Focus();
                 e.Handled = true;
+            }
+        }
+
+        private async void OnNavigationKeyDown(object sender, KeyEventArgs e)
+        {
+            if (DataContext is not ViewModels.Histories vm)
+                return;
+
+            var macCommand = OperatingSystem.IsMacOS() && e.KeyModifiers == KeyModifiers.Meta;
+            if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.Home)
+            {
+                e.Handled = true;
+                await vm.NavigateHomeAsync();
+            }
+            else if ((e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.Left) || (macCommand && e.Key == Key.OemOpenBrackets))
+            {
+                e.Handled = true;
+                await vm.NavigateBackAsync();
+            }
+            else if ((e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.Right) || (macCommand && e.Key == Key.OemCloseBrackets))
+            {
+                e.Handled = true;
+                await vm.NavigateForwardAsync();
             }
         }
 
@@ -489,7 +517,12 @@ namespace SourceGit.Views
 
         protected override void OnDataContextChanged(EventArgs e)
         {
+            _navigationHistories?.SuspendNavigationVisits();
             base.OnDataContextChanged(e);
+
+            _navigationHistories = DataContext as ViewModels.Histories;
+            if (IsLoaded)
+                _navigationHistories?.ResumeNavigationVisits();
 
             if (DataContext is ViewModels.Histories vm)
             {
@@ -706,6 +739,7 @@ namespace SourceGit.Views
             var reflog = new MenuItem();
             reflog.Header = App.Text("Repository.ShowLostCommits");
             reflog.Tag = "--reflog";
+            reflog.IsEnabled = histories.CanToggleReflog;
             if (histories.HasShowFlag(Models.HistoryShowFlags.Reflog))
                 reflog.Icon = this.CreateMenuIcon("Icons.Check");
             reflog.Click += (_, ev) =>
@@ -2281,6 +2315,7 @@ namespace SourceGit.Views
                 await this.ShowDialogAsync(new ViewModels.InteractiveRebase(repo, on, prefill));
         }
 
+        private ViewModels.Histories _navigationHistories = null;
         private Models.Branch _currentBranch = null;
         private Models.Bisect _bisect = null;
         private bool _hasSingleRemote = false;

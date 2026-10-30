@@ -551,11 +551,28 @@ namespace SourceGit
                     // Fetch latest release information.
                     using var client = new HttpClient();
                     client.Timeout = TimeSpan.FromSeconds(5);
+                    client.DefaultRequestHeaders.UserAgent.ParseAdd("SourceGit/1.0");
+                    client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
 
-                    var data = await client.GetStringAsync("https://sourcegit-scm.github.io/data/version.json");
+                    var data = await client.GetStringAsync("https://api.github.com/repos/tib8/sourcegit/releases/latest");
                     var ver = JsonSerializer.Deserialize(data, JsonCodeGen.Default.Version);
                     if (ver == null)
-                        return;
+                        throw new InvalidDataException("GitHub returned an empty release.");
+
+                    if (ver.IsNewVersion && (manually || ver.TagName != ViewModels.Preferences.Instance.IgnoreUpdateTag))
+                    {
+                        try
+                        {
+                            using var timeout = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(15));
+                            ver.ReleaseNotes = await Models.ReleaseHistory.LoadAsync(client, ver, timeout.Token);
+                        }
+                        catch (Exception e) when (e is HttpRequestException or OperationCanceledException or JsonException or InvalidDataException or FormatException)
+                        {
+                            // Release history is optional: keep the update and its latest
+                            // notes available even if a later API request fails.
+                            ver.ReleaseHistoryUnavailable = true;
+                        }
+                    }
 
                     if (manually)
                     {
