@@ -6,6 +6,8 @@ namespace SourceGit.AzureDevOps
     [JsonSerializable(typeof(RepositoryInfo))]
     [JsonSerializable(typeof(ConnectionData))]
     [JsonSerializable(typeof(ListResult<GitRef>))]
+    [JsonSerializable(typeof(ListResult<GitCommit>))]
+    [JsonSerializable(typeof(GitCommit))]
     [JsonSerializable(typeof(ListResult<Identity>))]
     [JsonSerializable(typeof(ListResult<PullRequest>))]
     [JsonSerializable(typeof(PullRequest))]

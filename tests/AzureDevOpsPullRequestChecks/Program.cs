@@ -29,6 +29,7 @@ internal static class Program
     {
         CheckRemotes();
         Task.Run(CheckWorkflowAsync).GetAwaiter().GetResult();
+        Task.Run(CheckCommitPagingAsync).GetAwaiter().GetResult();
         Task.Run(CheckPersonalAccessTokenAsync).GetAwaiter().GetResult();
         var fixture = Path.Combine(Path.GetTempPath(), "sourcegit-pr-checks-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(fixture);
@@ -56,6 +57,7 @@ internal static class Program
             CheckSignInFailure(fixture);
             CheckDialog(fixture, args.Contains("--render"));
             CheckTokenDialog(fixture, args.Contains("--render"));
+            CheckCommitDefaults(fixture);
         }
         finally
         {
@@ -266,15 +268,15 @@ internal static class Program
         Check(model.IsSignedIn && model.HasAccount && !model.IsConnected && !model.IsBusy, "successful sign-in remains distinct from repository access failure");
         Check(model.Status == App.Text("CreatePR.RepositoryLoadFailed"), "repository failure does not keep the initial sign-in prompt");
         Check(model.Error.Contains("401") && model.Error.Contains("Example account cannot read this repository"), "show HTTP status and server explanation");
-        Check(!model.ConnectionExpanded && model.RefreshLabel == App.Text("CreatePR.RetryConnection"), "signed-in user can retry repository loading");
+        Check(!model.ConnectionExpanded && model.CanRetryLoading, "signed-in user can retry repository loading");
         Check(server.SuppressedAuthRedirects, "API requests suppress federated HTML login redirects");
         server.ExpectedTenant = "77777777-7777-7777-7777-777777777777";
-        var mismatch = model.RefreshAsync();
+        var mismatch = model.RetryLoadingAsync();
         PumpUntil(() => mismatch.IsCompleted);
         Check(model.Error.Contains(server.ExpectedTenant) && model.Error.Contains(authentication.TenantId) && model.Error.Contains("multi-tenant"), "tenant mismatch provides the expected directory without changing configuration");
         Check(model.Tenant == "organizations" && model.IsSignedIn, "server tenant hint does not automatically switch the sign-in authority");
         server.RepositoryError = null;
-        var retry = model.RefreshAsync();
+        var retry = model.RetryLoadingAsync();
         PumpUntil(() => retry.IsCompleted);
         retry.GetAwaiter().GetResult();
         Check(model.IsConnected && model.IsSignedIn && authentication.SignIns == 1, "retry reuses sign-in without reopening the browser");
@@ -294,13 +296,18 @@ internal static class Program
         PumpUntil(() => !model.IsBusy);
         Check(model.IsConnected, "dialog loads through injected connection: " + model.Error);
         Check(model.Target == null && !model.CanCreate, "first use requires explicit target");
+        Check(model.Title.Length == 0 && model.AutoComplete && model.DeleteSourceBranch && model.MergeStrategy == 0, "new defaults enable auto-complete, squash, and deletion without a branch-name title");
+        Check(!model.CompletionExpanded && !window.FindControl<Expander>("CompletionOptions").IsExpanded, "completion section starts collapsed");
+        Check(model.CompletionSummary == "Auto-complete · Squash · Delete remote source branch", "collapsed summary describes all completion choices");
         model.Target = model.Branches.Single(x => x.Name == Target);
+        PumpUntil(() => !model.IsLoadingCommits);
         model.Title = "Improve widget selection";
         model.Description = "Use the selected widget consistently.\n\nVerified with sample data.";
         model.AutoComplete = true;
         model.DeleteSourceBranch = true;
         model.IsDraft = true;
         Check(!model.AutoCompleteAvailable && model.PrimaryLabel.Contains("draft"), "draft UI keeps auto-complete inactive");
+        Check(model.CompletionSummary.StartsWith("Draft (auto-complete off)"), "draft summary does not imply auto-complete will run");
         model.IsDraft = false;
         Check(model.MergeMessage == model.Title, "squash message follows fresh title");
         model.SelectedSearchResult = FakeServer.Reviewer();
@@ -308,6 +315,7 @@ internal static class Program
         model.Reviewers[0].IsRequired = true;
         Check(model.CanCreate, "valid published branch allows creation");
         Check(window.GetVisualDescendants().OfType<TextBox>().Any(x => x.AcceptsReturn), "native description accepts newlines");
+        Check(!model.HasStatus && !model.CanRetryLoading, "ready dialog has no redundant status or source refresh action");
 
         if (render)
         {
@@ -332,7 +340,7 @@ internal static class Program
         var initialize = restored.InitializeAsync();
         PumpUntil(() => initialize.IsCompleted);
         Check(restored.Target?.Name == Target && restored.AutoComplete && restored.DeleteSourceBranch && restored.Reviewers.Single().IsRequired, "restore last successful options");
-        Check(!restored.IsDraft && restored.Title == branch.Name && restored.Description.Length == 0, "PR-specific fields are fresh");
+        Check(!restored.IsDraft && restored.Title == "Improve widget selection" && restored.Description.Length == 0, "PR-specific fields are fresh");
         restored.DeleteSourceBranch = false;
         restored.Dispose();
         var saved = repo.Settings.AzureDevOpsPullRequests.Values.Single();
@@ -345,8 +353,93 @@ internal static class Program
         var anotherAccount = new CreatePullRequest(repo, remote, branch, http: new HttpClient(server), authenticationFactory: (_, _) => Task.FromResult<IAuthentication>(new FakeAuthentication("another-account")));
         var connect = anotherAccount.InitializeAsync();
         PumpUntil(() => connect.IsCompleted);
-        Check(anotherAccount.IsConnected && anotherAccount.Target == null && anotherAccount.Reviewers.Count == 0 && !anotherAccount.AutoComplete, "defaults stay isolated between accounts");
+        Check(anotherAccount.IsConnected && anotherAccount.Target == null && anotherAccount.Reviewers.Count == 0 && anotherAccount.AutoComplete && anotherAccount.DeleteSourceBranch, "defaults stay isolated between accounts");
         anotherAccount.Dispose();
+    }
+
+    private static async Task CheckCommitPagingAsync()
+    {
+        var server = new FakeServer
+        {
+            Commits = Enumerable.Range(1, 105).Reverse().Select(x => new GitCommit { CommitId = x.ToString("x40"), Comment = "Commit " + x }).ToList(),
+        };
+        server.Commits[104].CommentTruncated = true;
+        server.FullComments[server.Commits[104].CommitId] = "Commit 1\n\nFull original body.";
+        using var http = new HttpClient(server);
+        var client = new Client(http, Address, _ => Task.FromResult(new AuthenticationHeaderValue("Bearer", "fixture-token")));
+        await client.ResolveAsync(CancellationToken.None);
+        var commits = await client.GetCommitsAsync(server.SourceTip, new('c', 40), CancellationToken.None);
+        Check(commits.Count == 105 && commits[0].Comment == "Commit 1\n\nFull original body." && commits[^1].Comment == "Commit 105", "all commit pages and full messages are loaded oldest first");
+        Check(server.CommitPages == 2 && server.CommitDetails == 1, "truncated messages are expanded without fetching all commit details");
+        Check(server.Posts == 0 && server.Patches == 0, "reading default commit text never writes to the repository");
+    }
+
+    private static void CheckCommitDefaults(string fixture)
+    {
+        var previous = Preferences.Instance.AzureDevOpsConnection;
+        Preferences.Instance.AzureDevOpsConnection = new ConnectionSettings { ClientId = "55555555-5555-5555-5555-555555555555" };
+        var repo = new Repository(false, fixture, Path.Combine(fixture, ".git"));
+        var server = new FakeServer();
+        using var model = new CreatePullRequest(repo,
+            new() { Name = "origin", URL = Address.WebUrl },
+            new() { Name = "feature/widgets", Remote = "origin", FullName = "refs/remotes/origin/feature/widgets" },
+            http: new HttpClient(server), authenticationFactory: (_, _) => Task.FromResult<IAuthentication>(new FakeAuthentication("commit-defaults-account")));
+        var connect = model.InitializeAsync();
+        PumpUntil(() => connect.IsCompleted);
+        var target = model.Branches.Single(x => x.Name == Target);
+        server.Commits = [new() { CommitId = new('a', 40), Comment = "First subject\r\n\r\nFull body with Unicode: á." }];
+        model.Target = target;
+        PumpUntil(() => !model.IsLoadingCommits);
+        Check(model.Title == "First subject" && model.Description == "Full body with Unicode: á." && model.MergeMessage == model.Title, "single commit supplies subject, body, and squash message");
+        model.Target = null;
+        server.Commits = [new() { CommitId = new('b', 40), Comment = "Second subject" }, new() { CommitId = new('a', 40), Comment = "First subject\n\nDetails." }];
+        model.Target = target;
+        PumpUntil(() => !model.IsLoadingCommits);
+        Check(model.Title == "First subject" && model.Description == "- First subject\n  \n  Details.\n\n- Second subject", "multiple commits include every complete message in oldest-first order");
+        var gate = new TaskCompletionSource();
+        server.CommitGate = gate.Task;
+        model.Target = null;
+        model.Target = target;
+        Check(model.IsLoadingCommits && !model.CanCreate, "creation waits for commit defaults to finish loading");
+        model.Title = "Edited title";
+        model.Description = "Edited description";
+        model.MergeMessage = "Edited squash message";
+        gate.SetResult();
+        PumpUntil(() => !model.IsLoadingCommits);
+        Check(model.Title == "Edited title" && model.Description == "Edited description" && model.MergeMessage == "Edited squash message", "late commit response preserves manual edits");
+        gate = new TaskCompletionSource();
+        server.CommitGate = gate.Task;
+        model.Target = null;
+        model.Target = target;
+        model.Target = null;
+        server.CommitGate = null;
+        server.Commits = [];
+        model.Target = target;
+        PumpUntil(() => !model.IsLoadingCommits);
+        Check(model.Error == App.Text("CreatePR.Error.NoCommits"), "empty comparison is reported without a branch-name fallback");
+        gate.SetResult();
+        Dispatcher.UIThread.RunJobs();
+        Check(model.Description == "Edited description", "cancelled request cannot overwrite the selected comparison");
+        model.AutoComplete = false;
+        model.DeleteSourceBranch = false;
+        model.MergeStrategy = 1;
+        Check(model.CompletionSummary == "Manual completion · Rebase and fast-forward · Keep remote source branch", "summary follows changed completion options");
+        server.Commits = [new() { CommitId = server.SourceTip, Comment = "A change" }];
+        var reload = model.RetryLoadingAsync();
+        PumpUntil(() => reload.IsCompleted);
+        Check(model.CanCreate && !model.CanRetryLoading, "failed comparison can be retried without reopening or losing edits");
+        server.SourceMissing = true;
+        var submit = model.SubmitAsync();
+        PumpUntil(() => submit.IsCompleted);
+        Check(server.Posts == 0 && model.Error.Contains("Push this branch"), "Create PR automatically rechecks the published source");
+        server.SourceMissing = false;
+        Check(model.CanCreate, "correcting the source allows retry without a refresh button");
+        submit = model.SubmitAsync();
+        PumpUntil(() => submit.IsCompleted);
+        Check(model.IsFinished && server.Posts == 1 && server.Current.AutoCompleteSetBy == null && !server.Current.CompletionOptions.DeleteSourceBranch, "retry validates again and honors manual completion overrides");
+        var saved = repo.Settings.AzureDevOpsPullRequests.Values.Single(x => x.MergeStrategy == "rebase");
+        Check(!saved.AutoComplete && !saved.DeleteSourceBranch, "explicit manual choices are remembered despite new first-use defaults");
+        Preferences.Instance.AzureDevOpsConnection = previous;
     }
 
     private static async Task CheckPersonalAccessTokenAsync()
@@ -435,6 +528,7 @@ internal static class Program
             model.PersonalAccessToken = string.Empty;
         }
         model.Target = model.Branches.Single(x => x.Name == Target);
+        PumpUntil(() => !model.IsLoadingCommits);
         model.AutoComplete = true;
         model.SelectedSearchResult = FakeServer.Reviewer();
         model.AddReviewer();
@@ -458,7 +552,7 @@ internal static class Program
         Check(!other.Error.Contains(token), "connection error does not expose the PAT");
         server.RepositoryError = null;
         keychain.FailStore = true;
-        retry = other.RefreshAsync();
+        retry = other.RetryLoadingAsync();
         PumpUntil(() => retry.IsCompleted);
         Check(other.IsConnected && other.SessionOnly, "repository retry reuses session PAT after secure-store failure");
         var signOut = other.SignOutAsync();
@@ -537,6 +631,10 @@ internal static class Program
         public string ExpectedTenant;
         public string ExpectedAuthorization = "Bearer fixture-token";
         public string AccountId = ReviewerId;
+        public List<GitCommit> Commits = [new() { CommitId = new('a', 40), Comment = "Improve widget selection" }];
+        public Dictionary<string, string> FullComments { get; } = [];
+        public Task CommitGate;
+        public int CommitPages, CommitDetails;
         public bool SuppressedAuthRedirects;
         public int Posts, Patches, ReviewerWrites;
         public PullRequest Current;
@@ -558,6 +656,23 @@ internal static class Program
             }
             if (path.EndsWith("/identities"))
                 return Json(new ListResult<Identity> { Value = [Reviewer()] }, ApiJsonContext.Default.ListResultIdentity);
+            if (path.EndsWith("/commits"))
+            {
+                Check(query["searchCriteria.compareVersion.version"] == SourceTip && query["searchCriteria.itemVersion.version"] == new string('c', 40), "commit comparison walks from the source tip with the target as the baseline");
+                Check(query["searchCriteria.itemVersion.versionType"] == "commit" && query["searchCriteria.compareVersion.versionType"] == "commit" && query["searchCriteria.showOldestCommitsFirst"] == null, "comparison does not request oldest-first mode that ignores branch filters");
+                CommitPages++;
+                var result = Commits.Skip(int.Parse(query["$skip"])).Take(int.Parse(query["$top"])).ToList();
+                if (CommitGate != null)
+                    await CommitGate.WaitAsync(cancellationToken);
+                return Json(new ListResult<GitCommit> { Value = result }, ApiJsonContext.Default.ListResultGitCommit);
+            }
+            if (path.Contains("/commits/"))
+            {
+                CommitDetails++;
+                var id = path[(path.LastIndexOf('/') + 1)..];
+                Check(query["changeCount"] == "0", "full commit messages do not request file changes");
+                return Json(new GitCommit { CommitId = id, Comment = FullComments[id] }, ApiJsonContext.Default.GitCommit);
+            }
             if (path.EndsWith("/refs"))
             {
                 var refs = new List<GitRef> { new() { Name = Target, ObjectId = new('c', 40) } };

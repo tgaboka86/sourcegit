@@ -75,6 +75,39 @@ namespace SourceGit.AzureDevOps
             return null;
         }
 
+        public async Task<List<GitCommit>> GetCommitsAsync(string sourceCommit, string targetCommit, CancellationToken cancellationToken)
+        {
+            if (!IsCommitId(sourceCommit) || !IsCommitId(targetCommit))
+                throw new ServiceException("InvalidResponse");
+            var result = new List<GitCommit>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var skip = 0; ; skip += 100)
+            {
+                // compareVersion starts the walk; itemVersion is the excluded baseline.
+                // Pin both ends while paging. showOldestCommitsFirst would ignore these filters.
+                var path = Address.RepositoryApi + "/commits?searchCriteria.itemVersion.versionType=commit&searchCriteria.itemVersion.version=" + targetCommit +
+                    "&searchCriteria.compareVersion.versionType=commit&searchCriteria.compareVersion.version=" + sourceCommit + $"&$top=100&$skip={skip}";
+                var page = await GetAsync(path, ApiJsonContext.Default.ListResultGitCommit, cancellationToken).ConfigureAwait(false);
+                foreach (var entry in page.Value)
+                {
+                    if (!IsCommitId(entry.CommitId) || !seen.Add(entry.CommitId))
+                        throw new ServiceException("InvalidResponse");
+                    var commit = entry.CommentTruncated
+                        ? await GetAsync(Address.RepositoryApi + "/commits/" + entry.CommitId + "?changeCount=0", ApiJsonContext.Default.GitCommit, cancellationToken).ConfigureAwait(false)
+                        : entry;
+                    if (commit.CommitId != entry.CommitId || commit.CommentTruncated)
+                        throw new ServiceException("InvalidResponse");
+                    result.Add(commit);
+                }
+                if (page.Value.Count < 100)
+                    break;
+            }
+            result.Reverse();
+            return result;
+        }
+
+        private static bool IsCommitId(string value) => value is { Length: 40 } && value.All(Uri.IsHexDigit);
+
         public async Task<List<Identity>> SearchIdentitiesAsync(string term, CancellationToken cancellationToken)
         {
             var path = $"https://vssps.dev.azure.com/{Uri.EscapeDataString(Address.Organization)}/_apis/identities?searchFilter=General&queryMembership=None&filterValue={Uri.EscapeDataString(term)}";

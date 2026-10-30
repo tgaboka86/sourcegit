@@ -29,7 +29,7 @@ namespace SourceGit.Views
         private async void OnSignIn(object sender, RoutedEventArgs e) { if (DataContext is ViewModels.CreatePullRequest model) await model.SignInAsync(); }
         private async void OnSignOut(object sender, RoutedEventArgs e) { if (DataContext is ViewModels.CreatePullRequest model) await model.SignOutAsync(); }
         private async void OnCreate(object sender, RoutedEventArgs e) { if (DataContext is ViewModels.CreatePullRequest model) await model.SubmitAsync(); }
-        private async void OnRefresh(object sender, RoutedEventArgs e) { if (DataContext is ViewModels.CreatePullRequest model) await model.RefreshAsync(); }
+        private async void OnRetryLoading(object sender, RoutedEventArgs e) { if (DataContext is ViewModels.CreatePullRequest model) await model.RetryLoadingAsync(); }
         private void OnAddReviewer(object sender, RoutedEventArgs e) { (DataContext as ViewModels.CreatePullRequest)?.AddReviewer(); }
         private void OnRemoveReviewer(object sender, RoutedEventArgs e)
         {

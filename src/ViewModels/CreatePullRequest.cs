@@ -60,44 +60,67 @@ namespace SourceGit.ViewModels
         public bool IsConnected { get => _connected; private set { SetProperty(ref _connected, value); NotifyState(); } }
         public bool IsSignedIn { get => _signedIn; private set { SetProperty(ref _signedIn, value); NotifyState(); } }
         public bool HasAccount => _auth?.HasCredentials == true;
-        public string RefreshLabel => App.Text(IsConnected ? "CreatePR.Refresh" : "CreatePR.RetryConnection");
+        public bool CanRetryLoading => IsSignedIn && (!IsConnected || _commitLoadFailed);
         public bool IsBusy { get => _busy; private set { SetProperty(ref _busy, value); NotifyState(); } }
+        public bool IsLoadingCommits { get => _loadingCommits; private set { SetProperty(ref _loadingCommits, value); NotifyState(); } }
+        public bool HasActivity => IsBusy || IsLoadingCommits;
         public bool CanEdit => IsConnected && !IsBusy && !IsFinished && _store?.Pending == null;
         public bool IsFinished { get => _finished; private set { SetProperty(ref _finished, value); NotifyState(); } }
-        public string Status { get => _status; private set => SetProperty(ref _status, value); }
-        public string Error { get => _error; private set => SetProperty(ref _error, value); }
+        public string Status { get => _status; private set { SetProperty(ref _status, value); OnPropertyChanged(nameof(HasStatus)); } }
+        public string Error { get => _error; private set { SetProperty(ref _error, value); OnPropertyChanged(nameof(HasError)); } }
+        public bool HasStatus => !string.IsNullOrEmpty(Status);
+        public bool HasError => !string.IsNullOrEmpty(Error);
         public bool HasResultLink => _result?.PullRequest?.PullRequestId > 0;
         public bool HasPending => _store?.Pending != null;
         public bool HasUnknown => _store?.Pending is { PullRequestId: 0 };
         public bool RecoveryAcknowledged { get => _recoveryAcknowledged; set { SetProperty(ref _recoveryAcknowledged, value); NotifyState(); } }
         public bool CanClearRecovery => !IsBusy && HasPending && RecoveryAcknowledged;
         public string PrimaryLabel => HasPending ? App.Text(_store.Pending.PullRequestId > 0 ? "CreatePR.RetrySetup" : "CreatePR.CheckCreation") : App.Text(IsDraft ? "CreatePR.CreateDraft" : "CreatePR.Create");
-        public bool CanCreate => IsConnected && !IsBusy && !IsFinished && (HasPending || (_sourceValid && Target != null && !string.IsNullOrWhiteSpace(Title) && Reviewers.All(x => x.IsAvailable)));
+        public bool CanCreate => IsConnected && !HasActivity && !IsFinished && (HasPending || (!_commitLoadFailed && Target != null && !string.IsNullOrWhiteSpace(Title) && Reviewers.All(x => x.IsAvailable)));
         public bool AutoCompleteAvailable => !IsDraft;
         public bool IsSquash => MergeStrategy == 0;
         public string[] MergeStrategies { get; } = [App.Text("CreatePR.Squash"), App.Text("CreatePR.Rebase"), App.Text("CreatePR.Merge")];
         public string MergeHelp => App.Text("CreatePR.Help." + (MergeStrategy == 0 ? "Squash" : MergeStrategy == 1 ? "Rebase" : "Merge"));
         public string AutoCompleteHelp => App.Text(IsDraft ? "CreatePR.Help.Draft" : AutoComplete ? "CreatePR.Help.Auto" : "CreatePR.Help.Manual");
-        public GitRef Target { get => _target; set { SetProperty(ref _target, value); NotifyState(); } }
+        public bool CompletionExpanded { get => _completionExpanded; set => SetProperty(ref _completionExpanded, value); }
+        public string CompletionSummary => string.Join(" · ",
+            App.Text(IsDraft ? "CreatePR.Summary.Draft" : AutoComplete ? "CreatePR.Summary.Auto" : "CreatePR.Summary.Manual"),
+            MergeStrategies[Math.Clamp(MergeStrategy, 0, MergeStrategies.Length - 1)],
+            App.Text(DeleteSourceBranch ? "CreatePR.Summary.Delete" : "CreatePR.Summary.Keep"));
+        public GitRef Target
+        {
+            get => _target;
+            set
+            {
+                if (SetProperty(ref _target, value))
+                    _ = LoadCommitTextAsync();
+                NotifyState();
+            }
+        }
         public Identity SelectedSearchResult { get => _selectedSearchResult; set => SetProperty(ref _selectedSearchResult, value); }
         public string Title
         {
             get => _title;
             set
             {
-                if (SetProperty(ref _title, value) && !_messageEdited)
+                if (SetProperty(ref _title, value))
                 {
-                    _mergeMessage = value;
-                    OnPropertyChanged(nameof(MergeMessage));
+                    if (!_updatingCommitText)
+                        _titleEdited = true;
+                    if (!_messageEdited)
+                    {
+                        _mergeMessage = value;
+                        OnPropertyChanged(nameof(MergeMessage));
+                    }
                 }
                 NotifyState();
             }
         }
-        public string Description { get => _description; set => SetProperty(ref _description, value); }
+        public string Description { get => _description; set { if (SetProperty(ref _description, value) && !_updatingCommitText) _descriptionEdited = true; } }
         public bool IsDraft { get => _draft; set { SetProperty(ref _draft, value); OnPropertyChanged(nameof(AutoCompleteAvailable)); OnPropertyChanged(nameof(AutoCompleteHelp)); NotifyState(); } }
-        public bool AutoComplete { get => _auto; set { SetProperty(ref _auto, value); OnPropertyChanged(nameof(AutoCompleteHelp)); } }
-        public bool DeleteSourceBranch { get => _delete; set => SetProperty(ref _delete, value); }
-        public int MergeStrategy { get => _mergeStrategy; set { SetProperty(ref _mergeStrategy, value); OnPropertyChanged(nameof(IsSquash)); OnPropertyChanged(nameof(MergeHelp)); } }
+        public bool AutoComplete { get => _auto; set { SetProperty(ref _auto, value); OnPropertyChanged(nameof(AutoCompleteHelp)); OnPropertyChanged(nameof(CompletionSummary)); } }
+        public bool DeleteSourceBranch { get => _delete; set { SetProperty(ref _delete, value); OnPropertyChanged(nameof(CompletionSummary)); } }
+        public int MergeStrategy { get => _mergeStrategy; set { SetProperty(ref _mergeStrategy, value); OnPropertyChanged(nameof(IsSquash)); OnPropertyChanged(nameof(MergeHelp)); OnPropertyChanged(nameof(CompletionSummary)); } }
         public string MergeMessage { get => _mergeMessage; set { _messageEdited = true; SetProperty(ref _mergeMessage, value); } }
         public string SearchText { get => _searchText; set { if (SetProperty(ref _searchText, value)) _ = SearchAsync(value); } }
 
@@ -110,7 +133,7 @@ namespace SourceGit.ViewModels
             _localBranch = localBranch;
             SourceBranch = branch.Name;
             _sourceRef = "refs/heads/" + branch.Name;
-            _title = branch.Name;
+            _title = string.Empty;
             _mergeMessage = _title;
             RemoteAddress.TryParse(remote.URL, out _address);
             RepositoryLabel = _address == null ? remote.Name : $"{_address.Organization} / {_address.Project} / {_address.Repository}";
@@ -133,7 +156,6 @@ namespace SourceGit.ViewModels
             IsConnected = false;
             IsSignedIn = false;
             AccountName = string.Empty;
-            _sourceValid = false;
             _result = null;
             IsFinished = false;
             _store = null;
@@ -141,6 +163,7 @@ namespace SourceGit.ViewModels
             Branches.Clear();
             SearchResults.Clear();
             _searchCancellation?.Cancel();
+            _commitCancellation?.Cancel();
             Target = null;
             _client = null;
             _service = null;
@@ -225,9 +248,8 @@ namespace SourceGit.ViewModels
             }
             else
             {
-                await _service.ValidateSourceAsync(_sourceRef, _lifetime.Token);
-                _sourceValid = true;
-                Status = App.Text("CreatePR.SourceReady");
+                Status = string.Empty;
+                await LoadCommitTextAsync();
                 if (defaults.TargetRef.Length > 0 && Target == null)
                     Error = App.Text("CreatePR.Error.SavedTargetUnavailable");
             }
@@ -241,14 +263,82 @@ namespace SourceGit.ViewModels
             ConnectionExpanded = false;
         }
 
-        public Task RefreshAsync() => !IsConnected ? ConnectAsync(false) : RunAsync(async () =>
+        public Task RetryLoadingAsync() => IsConnected ? RunAsync(LoadCommitTextAsync) : ConnectAsync(false);
+
+        private async Task LoadCommitTextAsync()
         {
-            if (_client == null)
+            _commitCancellation?.Cancel();
+            _commitCancellation = null;
+            _commitLoadFailed = false;
+            if (_disposed || !IsConnected || HasPending)
+            {
+                IsLoadingCommits = false;
                 return;
-            await _service.ValidateSourceAsync(_sourceRef, _lifetime.Token);
-            _sourceValid = true;
-            Status = App.Text("CreatePR.SourceReady");
-        });
+            }
+            using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+            _commitCancellation = cancellation;
+            var target = Target;
+            IsLoadingCommits = true;
+            ApplyCommitText(string.Empty, string.Empty);
+            try
+            {
+                if (target == null)
+                {
+                    Status = string.Empty;
+                    return;
+                }
+                Error = string.Empty;
+                Status = App.Text("CreatePR.LoadingCommits");
+                var sourceTip = await _service.ValidateSourceAsync(_sourceRef, cancellation.Token);
+                var targetRef = await _client.GetRefAsync(target.Name, cancellation.Token) ?? throw new ServiceException("InvalidTarget");
+                var commits = await _client.GetCommitsAsync(sourceTip, targetRef.ObjectId, cancellation.Token);
+                cancellation.Token.ThrowIfCancellationRequested();
+                var messages = commits.Select(x => (x.Comment ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Trim()).ToArray();
+                var first = messages.FirstOrDefault() ?? string.Empty;
+                var newline = first.IndexOf('\n');
+                var title = newline < 0 ? first : first[..newline];
+                var description = messages.Length > 1
+                    ? string.Join("\n\n", messages.Select(x => "- " + x.Replace("\n", "\n  ")))
+                    : newline < 0 ? string.Empty : first[(newline + 1)..].Trim();
+                ApplyCommitText(title, description);
+                Status = string.Empty;
+                if (messages.Length == 0)
+                {
+                    _commitLoadFailed = true;
+                    Error = App.Text("CreatePR.Error.NoCommits");
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                if (!_disposed && !cancellation.IsCancellationRequested)
+                {
+                    _commitLoadFailed = true;
+                    ShowError(ex);
+                }
+            }
+            finally
+            {
+                if (ReferenceEquals(_commitCancellation, cancellation))
+                {
+                    _commitCancellation = null;
+                    IsLoadingCommits = false;
+                }
+            }
+        }
+
+        private void ApplyCommitText(string title, string description)
+        {
+            _updatingCommitText = true;
+            try
+            {
+                if (!_titleEdited)
+                    Title = title;
+                if (!_descriptionEdited)
+                    Description = description;
+            }
+            finally { _updatingCommitText = false; }
+        }
 
         public Task SignOutAsync() => RunAsync(async () =>
         {
@@ -286,7 +376,7 @@ namespace SourceGit.ViewModels
 
         public Task SubmitAsync() => RunAsync(async () =>
         {
-            if (!IsConnected || IsFinished)
+            if (!IsConnected || IsFinished || IsLoadingCommits || (_commitLoadFailed && !HasPending))
                 return;
             Status = App.Text(HasPending ? "CreatePR.Checking" : "CreatePR.Creating");
             if (HasPending)
@@ -327,7 +417,7 @@ namespace SourceGit.ViewModels
             {
                 TargetRef = pr.TargetRefName,
                 Reviewers = pr.Reviewers.Where(x => Reviewers.Any(y => string.Equals(x.Id, y.Id, StringComparison.OrdinalIgnoreCase))).Select(x => new ReviewerSelection { Id = x.Id, IsRequired = x.IsRequired }).ToList(),
-                AutoComplete = pr.IsDraft ? previous?.AutoComplete ?? false : pr.AutoCompleteSetBy != null || (pr.Status == "completed" && AutoComplete),
+                AutoComplete = pr.IsDraft ? previous?.AutoComplete ?? true : pr.AutoCompleteSetBy != null || (pr.Status == "completed" && AutoComplete),
                 MergeStrategy = pr.CompletionOptions.MergeStrategy,
                 DeleteSourceBranch = pr.CompletionOptions.DeleteSourceBranch,
             };
@@ -356,8 +446,8 @@ namespace SourceGit.ViewModels
                 _store.Clear();
                 RecoveryAcknowledged = false;
                 _result = null;
-                _sourceValid = false;
-                Status = App.Text("CreatePR.RefreshRequired");
+                Status = string.Empty;
+                Error = string.Empty;
                 NotifyState();
             }
             catch (Exception ex) { ShowError(ex); }
@@ -423,8 +513,6 @@ namespace SourceGit.ViewModels
             Status = App.Text(IsSignedIn && !IsConnected ? UsePersonalAccessToken ? "CreatePR.TokenRepositoryLoadFailed" : "CreatePR.RepositoryLoadFailed" : "CreatePR.RequestFailed");
             if (tokenRejected)
                 ConnectionExpanded = true;
-            if (ex is ServiceException { Code: "SourceChanged" or "Unpublished" or "InvalidSource" })
-                _sourceValid = false;
             if (ex is ServiceException { Code: "SignInRequired" or "ConnectionSetup" or "PersonalAccessTokenRequired" })
             {
                 IsSignedIn = false;
@@ -444,7 +532,9 @@ namespace SourceGit.ViewModels
             OnPropertyChanged(nameof(PrimaryLabel));
             OnPropertyChanged(nameof(CanClearRecovery));
             OnPropertyChanged(nameof(HasAccount));
-            OnPropertyChanged(nameof(RefreshLabel));
+            OnPropertyChanged(nameof(CanRetryLoading));
+            OnPropertyChanged(nameof(HasActivity));
+            OnPropertyChanged(nameof(CompletionSummary));
         }
 
         public void Dispose()
@@ -455,6 +545,7 @@ namespace SourceGit.ViewModels
             _lifetime.Cancel();
             _searchCancellation?.Cancel();
             _searchCancellation?.Dispose();
+            _commitCancellation?.Cancel();
             _http.Dispose();
             _lifetime.Dispose();
             _auth?.Dispose();
@@ -470,6 +561,7 @@ namespace SourceGit.ViewModels
         private readonly HttpClient _http;
         private readonly CancellationTokenSource _lifetime = new();
         private CancellationTokenSource _searchCancellation;
+        private CancellationTokenSource _commitCancellation;
         private readonly Func<ConnectionSettings, string, Task<IAuthentication>> _authenticationFactory;
         private readonly Func<string, string, Task<PersonalAccessTokenAuthentication>> _personalAccessTokenFactory;
         private IAuthentication _auth;
@@ -498,12 +590,17 @@ namespace SourceGit.ViewModels
         private bool _signedIn;
         private bool _busy;
         private bool _finished;
-        private bool _sourceValid;
+        private bool _loadingCommits;
+        private bool _commitLoadFailed;
+        private bool _completionExpanded;
+        private bool _updatingCommitText;
+        private bool _titleEdited;
+        private bool _descriptionEdited;
         private bool _recoveryAcknowledged;
         private bool _messageEdited;
         private bool _draft;
-        private bool _auto;
-        private bool _delete;
+        private bool _auto = true;
+        private bool _delete = true;
         private bool _disposed;
         private int _mergeStrategy;
     }

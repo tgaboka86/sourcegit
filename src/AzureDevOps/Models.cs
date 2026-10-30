@@ -21,9 +21,9 @@ namespace SourceGit.AzureDevOps
     {
         public string TargetRef { get; set; } = string.Empty;
         public List<ReviewerSelection> Reviewers { get; set; } = [];
-        public bool AutoComplete { get; set; }
+        public bool AutoComplete { get; set; } = true;
         public string MergeStrategy { get; set; } = "squash";
-        public bool DeleteSourceBranch { get; set; }
+        public bool DeleteSourceBranch { get; set; } = true;
     }
 
     public sealed class PendingCreation
@@ -95,6 +95,13 @@ namespace SourceGit.AzureDevOps
     public sealed class CommitRef
     {
         public string CommitId { get; set; }
+    }
+
+    public sealed class GitCommit
+    {
+        public string CommitId { get; set; }
+        public string Comment { get; set; }
+        public bool CommentTruncated { get; set; }
     }
 
     public sealed class PullRequest

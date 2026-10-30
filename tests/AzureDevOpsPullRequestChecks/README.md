@@ -8,6 +8,8 @@ Sign-in regression cases distinguish successful Microsoft authentication from a 
 
 PAT regression cases cover Basic authentication, masked input, account identification, organization-isolated credential storage, reconnection, storage failures, sign-out failures, expiration/permission errors, and PR creation with reviewers and auto-complete. They verify that synthetic secrets are absent from ordinary preferences and repository settings. Credential storage is injected; tests do not access real saved PATs. `--render` also saves light and dark images of the PAT connection panel.
 
+Commit-default checks cover single and multiple commits, complete messages across paginated comparisons, Unicode and multiline bodies, cancelled target changes, and preserving manual edits during delayed responses. Dialog checks verify the collapsed completion summary, first-use defaults, remembered overrides, and automatic source validation/retry without a separate refresh step.
+
 Build into a separate output directory to avoid locking a running SourceGit installation:
 
 ```powershell

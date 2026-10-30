@@ -66,7 +66,7 @@
           </StackPanel>
           <StackPanel Spacing="4">
             <TextBlock Text="{DynamicResource Text.CreatePR.Description}"/>
-            <TextBox Text="{Binding Description, Mode=TwoWay}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxHeight="200" MaxLength="4000"/>
+            <TextBox Text="{Binding Description, Mode=TwoWay}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxHeight="200"/>
           </StackPanel>
           <TextBlock Text="{DynamicResource Text.CreatePR.Reviewers}"/>
           <TextBox Text="{Binding SearchText, Mode=TwoWay}" Watermark="{DynamicResource Text.CreatePR.SearchReviewers}"/>
@@ -90,7 +90,13 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
           <CheckBox Content="{DynamicResource Text.CreatePR.Draft}" IsChecked="{Binding IsDraft, Mode=TwoWay}"/>
-          <Expander Header="{DynamicResource Text.CreatePR.Completion}" HorizontalAlignment="Stretch" IsExpanded="True">
+          <Expander x:Name="CompletionOptions" HorizontalAlignment="Stretch" IsExpanded="{Binding CompletionExpanded, Mode=TwoWay}">
+            <Expander.Header>
+              <StackPanel Spacing="4">
+                <TextBlock Text="{DynamicResource Text.CreatePR.Completion}"/>
+                <TextBlock Text="{Binding CompletionSummary}" IsVisible="{Binding !CompletionExpanded}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.FG2}"/>
+              </StackPanel>
+            </Expander.Header>
             <StackPanel Spacing="8" Margin="0,8,0,0">
               <CheckBox Content="{DynamicResource Text.CreatePR.AutoComplete}" IsChecked="{Binding AutoComplete, Mode=TwoWay}" IsEnabled="{Binding AutoCompleteAvailable}"/>
               <TextBlock Text="{Binding AutoCompleteHelp}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.FG2}"/>
@@ -107,7 +113,6 @@
             </StackPanel>
           </Expander>
         </StackPanel>
-        <TextBlock Text="{DynamicResource Text.CreatePR.PublishedOnly}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.FG2}"/>
         <StackPanel IsVisible="{Binding HasPending}" Spacing="8">
           <Button Classes="flat" Content="{DynamicResource Text.CreatePR.OpenRepository}" Click="OnOpenRepository" HorizontalAlignment="Left"/>
           <CheckBox Content="{DynamicResource Text.CreatePR.RecoveryAcknowledged}" IsChecked="{Binding RecoveryAcknowledged, Mode=TwoWay}"/>
@@ -116,12 +121,12 @@
       </StackPanel>
     </ScrollViewer>
     <StackPanel Grid.Row="2" Margin="22,4" Spacing="4">
-      <ProgressBar IsIndeterminate="True" Height="3" IsVisible="{Binding IsBusy}"/>
-      <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
-      <SelectableTextBlock Text="{Binding Error}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.FG2}"/>
+      <ProgressBar IsIndeterminate="True" Height="3" IsVisible="{Binding HasActivity}"/>
+      <TextBlock Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap"/>
+      <SelectableTextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.FG2}"/>
     </StackPanel>
     <WrapPanel Grid.Row="3" HorizontalAlignment="Right" Margin="18,8,18,14">
-      <Button Classes="flat" Content="{Binding RefreshLabel}" Click="OnRefresh" IsVisible="{Binding IsSignedIn}" IsEnabled="{Binding !IsBusy}" Margin="4"/>
+      <Button Classes="flat" Content="{DynamicResource Text.CreatePR.RetryConnection}" Click="OnRetryLoading" IsVisible="{Binding CanRetryLoading}" IsEnabled="{Binding !HasActivity}" Margin="4"/>
       <Button Classes="flat" Content="{DynamicResource Text.CreatePR.Open}" Click="OnOpenResult" IsVisible="{Binding HasResultLink}" Margin="4"/>
       <Button Classes="flat" Content="{DynamicResource Text.Close}" Click="OnClose" Margin="4"/>
       <Button Classes="flat primary" Content="{Binding PrimaryLabel}" Click="OnCreate" IsEnabled="{Binding CanCreate}" IsVisible="{Binding !IsFinished}" Margin="4"/>

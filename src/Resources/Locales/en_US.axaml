@@ -32,6 +32,11 @@
   <x:String x:Key="Text.CreatePR.Remove">Remove</x:String>
   <x:String x:Key="Text.CreatePR.Draft">Create as draft</x:String>
   <x:String x:Key="Text.CreatePR.Completion">Completion options</x:String>
+  <x:String x:Key="Text.CreatePR.Summary.Auto">Auto-complete</x:String>
+  <x:String x:Key="Text.CreatePR.Summary.Manual">Manual completion</x:String>
+  <x:String x:Key="Text.CreatePR.Summary.Draft">Draft (auto-complete off)</x:String>
+  <x:String x:Key="Text.CreatePR.Summary.Delete">Delete remote source branch</x:String>
+  <x:String x:Key="Text.CreatePR.Summary.Keep">Keep remote source branch</x:String>
   <x:String x:Key="Text.CreatePR.AutoComplete">Auto-complete after required approvals and checks</x:String>
   <x:String x:Key="Text.CreatePR.MergeStrategy">Merge strategy</x:String>
   <x:String x:Key="Text.CreatePR.Squash">Squash</x:String>
@@ -47,13 +52,11 @@
   <x:String x:Key="Text.CreatePR.Help.Merge">Keeps the original commits and adds a merge commit joining the source and target histories.</x:String>
   <x:String x:Key="Text.CreatePR.Help.Delete">When selected, removes the remote source branch after a successful merge. Your local branch remains.</x:String>
   <x:String x:Key="Text.CreatePR.Help.Message">The message for the single commit added to the target branch.</x:String>
-  <x:String x:Key="Text.CreatePR.PublishedOnly">Push and synchronize the source branch before creating a PR. Uncommitted changes are not included.</x:String>
   <x:String x:Key="Text.CreatePR.PushFirst">Create PR — push or synchronize the branch first</x:String>
   <x:String x:Key="Text.CreatePR.SelectPublishedBranch">Create PR — select the intended branch under Remotes</x:String>
   <x:String x:Key="Text.CreatePR.OpenRepository">Open pull requests in Azure DevOps</x:String>
   <x:String x:Key="Text.CreatePR.RecoveryAcknowledged">I have checked this creation attempt in Azure DevOps.</x:String>
   <x:String x:Key="Text.CreatePR.ClearRecovery">Clear the recovery record</x:String>
-  <x:String x:Key="Text.CreatePR.Refresh">Refresh source</x:String>
   <x:String x:Key="Text.CreatePR.Open">Open pull request</x:String>
   <x:String x:Key="Text.CreatePR.Create">Create PR</x:String>
   <x:String x:Key="Text.CreatePR.CreateDraft">Create draft PR</x:String>
@@ -69,10 +72,10 @@
   <x:String x:Key="Text.CreatePR.RequestFailed">The operation could not be completed.</x:String>
   <x:String x:Key="Text.CreatePR.RetryConnection">Retry loading</x:String>
   <x:String x:Key="Text.CreatePR.HttpStatus">HTTP {0}.</x:String>
-  <x:String x:Key="Text.CreatePR.SourceReady">The source branch is published and ready.</x:String>
+  <x:String x:Key="Text.CreatePR.LoadingCommits">Loading commit messages…</x:String>
+  <x:String x:Key="Text.CreatePR.Error.NoCommits">There are no source commits to include for this target branch.</x:String>
   <x:String x:Key="Text.CreatePR.UnavailableReviewer">Unavailable reviewer — remove or replace this selection</x:String>
   <x:String x:Key="Text.CreatePR.PendingNotice">A previous creation attempt needs checking. Its original settings will be used for recovery.</x:String>
-  <x:String x:Key="Text.CreatePR.RefreshRequired">Recovery record cleared. Refresh the source before trying again.</x:String>
   <x:String x:Key="Text.CreatePR.Checking">Checking the previous creation attempt…</x:String>
   <x:String x:Key="Text.CreatePR.Creating">Creating pull request…</x:String>
   <x:String x:Key="Text.CreatePR.Cancelled">Operation cancelled.</x:String>
@@ -98,7 +101,7 @@
   <x:String x:Key="Text.CreatePR.Error.AmbiguousRemote">The fetch and push URLs identify different repositories. Select the intended remote explicitly before creating a PR.</x:String>
   <x:String x:Key="Text.CreatePR.Error.Forbidden">Your account does not have permission for this operation in Azure DevOps.</x:String>
   <x:String x:Key="Text.CreatePR.Error.NotFound">The repository, branch, or pull request could not be found.</x:String>
-  <x:String x:Key="Text.CreatePR.Error.Conflict">Azure DevOps reported a conflict. Refresh and check whether a PR already exists.</x:String>
+  <x:String x:Key="Text.CreatePR.Error.Conflict">Azure DevOps reported a conflict. Check whether a PR already exists, then try again.</x:String>
   <x:String x:Key="Text.CreatePR.Error.Throttled">Azure DevOps is limiting requests. Wait before trying again.</x:String>
   <x:String x:Key="Text.CreatePR.Error.ServerRejected">Azure DevOps rejected the request. Check the branch policies, merge strategy, reviewers, and your permissions.</x:String>
   <x:String x:Key="Text.CreatePR.Error.StorageFailed">Could not save the local recovery record. Check that the repository settings are writable.</x:String>
