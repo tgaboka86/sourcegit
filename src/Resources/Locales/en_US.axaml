@@ -926,6 +926,14 @@ Manually add a branch/tag history filter will disable this feature automatically
   <x:String x:Key="Text.ScanRepositories.UseCustomDir" xml:space="preserve">Scan another custom directory</x:String>
   <x:String x:Key="Text.SelfUpdate" xml:space="preserve">Check for Updates...</x:String>
   <x:String x:Key="Text.SelfUpdate.Available" xml:space="preserve">New version of this software is available: </x:String>
+  <x:String x:Key="Text.SelfUpdate.BrowserOnly" xml:space="preserve">In-app installation requires a Windows package for this architecture with a SHA-256 digest. Use the browser to download other packages.</x:String>
+  <x:String x:Key="Text.SelfUpdate.Cancelled" xml:space="preserve">Download cancelled.</x:String>
+  <x:String x:Key="Text.SelfUpdate.ConfirmInstall" xml:space="preserve">SHA-256 verified. Install this update and restart SourceGit? Finish any running Git operations before continuing. Installation directory:</x:String>
+  <x:String x:Key="Text.SelfUpdate.Downloading" xml:space="preserve">Downloading and verifying update…</x:String>
+  <x:String x:Key="Text.SelfUpdate.Install" xml:space="preserve">Download and install…</x:String>
+  <x:String x:Key="Text.SelfUpdate.InstallFailed" xml:space="preserve">Installation failed:</x:String>
+  <x:String x:Key="Text.SelfUpdate.OpenBrowser" xml:space="preserve">Open in browser</x:String>
+  <x:String x:Key="Text.SelfUpdate.Verified" xml:space="preserve">SHA-256 verified. Ready to install.</x:String>
   <x:String x:Key="Text.SelfUpdate.CurrentVersion" xml:space="preserve">Current Version: </x:String>
   <x:String x:Key="Text.SelfUpdate.Error" xml:space="preserve">Check for updates failed!</x:String>
   <x:String x:Key="Text.SelfUpdate.GotoDownload" xml:space="preserve">Download</x:String>
