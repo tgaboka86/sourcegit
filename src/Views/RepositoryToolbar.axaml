@@ -25,6 +25,19 @@
     </StackPanel>
 
     <StackPanel Grid.Column="1" Orientation="Horizontal">
+      <!-- Reserve the slot so refresh activity never moves the toolbar buttons. -->
+      <Grid Width="32">
+        <Border Background="Transparent"
+                IsVisible="{Binding IsRefreshing}"
+                ToolTip.Tip="{DynamicResource Text.Repository.Refreshing}"
+                AutomationProperties.Name="{DynamicResource Text.Repository.Refreshing}">
+          <v:LoadingIcon Width="12" Height="12"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Opacity="0.65"
+                         IsVisible="{Binding IsRefreshing}"/>
+        </Border>
+      </Grid>
+
       <Button Classes="icon_button" Width="32" Tapped="Fetch">
         <ToolTip.Tip>
           <StackPanel Orientation="Vertical">

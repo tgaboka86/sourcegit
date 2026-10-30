@@ -17,8 +17,14 @@ namespace SourceGit.ViewModels
         public bool IsLoading
         {
             get => _isLoading;
-            set => SetProperty(ref _isLoading, value);
+            set
+            {
+                if (SetProperty(ref _isLoading, value))
+                    OnPropertyChanged(nameof(IsInitialLoading));
+            }
         }
+
+        public bool IsInitialLoading => _isLoading && !_hasLoaded;
 
         public bool IsSearchingCommits
         {
@@ -152,6 +158,12 @@ namespace SourceGit.ViewModels
                         if (head == null)
                             DetailContext = Models.Null.Instance;
                     }
+                }
+
+                if (!_hasLoaded)
+                {
+                    _hasLoaded = true;
+                    OnPropertyChanged(nameof(IsInitialLoading));
                 }
             }
         }
@@ -977,6 +989,7 @@ namespace SourceGit.ViewModels
         private bool _hasSingleRemote = false;
         private CommitDetailSharedData _commitDetailSharedData = null;
         private bool _isLoading = true;
+        private bool _hasLoaded = false;
         private List<Models.Commit> _commits = [];
         private Models.CommitGraph _graph = null;
         private List<Models.Commit> _selectedCommits = [];
