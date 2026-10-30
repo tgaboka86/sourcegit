@@ -933,6 +933,7 @@ Manually add a branch/tag history filter will disable this feature automatically
   <x:String x:Key="Text.SelfUpdate.Install" xml:space="preserve">Download and install…</x:String>
   <x:String x:Key="Text.SelfUpdate.InstallFailed" xml:space="preserve">Installation failed:</x:String>
   <x:String x:Key="Text.SelfUpdate.OpenBrowser" xml:space="preserve">Open in browser</x:String>
+  <x:String x:Key="Text.SelfUpdate.ReleaseHistoryUnavailable" xml:space="preserve">Could not load intermediate release notes. Only the latest release notes are shown. Check again or open the releases in your browser.</x:String>
   <x:String x:Key="Text.SelfUpdate.Verified" xml:space="preserve">SHA-256 verified. Ready to install.</x:String>
   <x:String x:Key="Text.SelfUpdate.CurrentVersion" xml:space="preserve">Current Version: </x:String>
   <x:String x:Key="Text.SelfUpdate.Error" xml:space="preserve">Check for updates failed!</x:String>

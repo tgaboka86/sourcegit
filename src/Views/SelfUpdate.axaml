@@ -61,7 +61,7 @@
                 <Run Text="{Binding ReleaseDateStr, Mode=OneWay}"/>
               </TextBlock>
 
-              <Border Width="500" MaxHeight="400"
+              <Border Width="500" Height="320"
                       Margin="0,8,0,0"
                       Background="{DynamicResource Brush.Contents}"
                       BorderThickness="1"

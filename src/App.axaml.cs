@@ -559,6 +559,21 @@ namespace SourceGit
                     if (ver == null)
                         throw new InvalidDataException("GitHub returned an empty release.");
 
+                    if (ver.IsNewVersion && (manually || ver.TagName != ViewModels.Preferences.Instance.IgnoreUpdateTag))
+                    {
+                        try
+                        {
+                            using var timeout = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(15));
+                            ver.ReleaseNotes = await Models.ReleaseHistory.LoadAsync(client, ver, timeout.Token);
+                        }
+                        catch (Exception e) when (e is HttpRequestException or OperationCanceledException or JsonException or InvalidDataException or FormatException)
+                        {
+                            // Release history is optional: keep the update and its latest
+                            // notes available even if a later API request fails.
+                            ver.ReleaseHistoryUnavailable = true;
+                        }
+                    }
+
                     if (manually)
                     {
                         if (ver.IsNewVersion)
