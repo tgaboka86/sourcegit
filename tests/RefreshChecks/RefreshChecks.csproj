@@ -6,5 +6,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/Models/RefreshCoordinator.cs" Link="RefreshCoordinator.cs" />
+    <Compile Include="../../src/Models/WatcherRecovery.cs" Link="WatcherRecovery.cs" />
+    <Compile Include="../../src/Models/Watcher.cs" Link="Watcher.cs" />
+    <Compile Include="../../src/Models/IRepository.cs" Link="IRepository.cs" />
   </ItemGroup>
 </Project>

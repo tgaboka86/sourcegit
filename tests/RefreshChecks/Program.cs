@@ -5,7 +5,9 @@ await CategoriesRunIndependently();
 await RecoversAfterFailure();
 await CloseDiscardsPendingAndCancelsActive();
 await CloseDoesNotWaitForProcessTermination();
-Console.WriteLine("Refresh coordinator checks passed.");
+RecoveryWaitsForQuietAndHasABound();
+await WatcherRecoversOnceAndHonorsOperationLock();
+Console.WriteLine("Refresh coordinator and watcher recovery checks passed.");
 
 static TaskCompletionSource Signal() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 static void Check(bool condition, string message)
@@ -159,4 +161,80 @@ static async Task CloseDiscardsPendingAndCancelsActive()
     await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
     await coordinator.WhenIdleAsync();
     Check(runs == 1, "Close started a pending refresh.");
+}
+
+static void RecoveryWaitsForQuietAndHasABound()
+{
+    var recovery = new WatcherRecovery();
+    recovery.Schedule(100);
+    recovery.Schedule(200);
+    recovery.RecordActivity(900);
+    Check(!recovery.TryTake(1899), "Recovery did not wait for quiet.");
+    Check(recovery.TryTake(1900), "Recovery missed the end of the quiet period.");
+    Check(!recovery.TryTake(10000), "One overflow burst caused multiple recoveries.");
+
+    recovery.Schedule(11000);
+    for (var now = 11100; now < 16000; now += 100)
+    {
+        recovery.Schedule(now);
+        recovery.RecordActivity(now);
+        Check(!recovery.TryTake(now), "Continuous events triggered recovery too early.");
+    }
+    recovery.RecordActivity(16000);
+    Check(recovery.TryTake(16000), "Repeated errors postponed recovery past the maximum wait.");
+
+    recovery.Schedule(16001);
+    Check(!recovery.TryTake(16002), "Next burst inherited the previous deadline.");
+    Check(recovery.TryTake(17001), "A new overflow after recovery was dropped.");
+}
+
+static async Task WatcherRecoversOnceAndHonorsOperationLock()
+{
+    var path = Path.Combine(Path.GetTempPath(), $"sourcegit-watcher-check-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(Path.Combine(path, ".git"));
+    try
+    {
+        var repository = new RecordingRepository();
+        using var watcher = new Watcher(repository, path, Path.Combine(path, ".git"));
+        using var operation = watcher.Lock();
+        // Inject native buffer errors; the subsequent dispatch still uses the real timer.
+        var error = typeof(Watcher).GetMethod("OnWatcherError", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        for (var i = 0; i < 20; i++)
+            error.Invoke(watcher, [null, new ErrorEventArgs(new InternalBufferOverflowException())]);
+        await Task.Delay(1200);
+        Check(repository.Total == 0, "Watcher refreshed during an application operation.");
+        operation.Dispose();
+        operation.Dispose();
+        await repository.Recovered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(300);
+        Check(repository.Total == 7, $"Expected one complete recovery, got {repository.Total} calls.");
+        watcher.Dispose();
+        error.Invoke(watcher, [null, new ErrorEventArgs(new InternalBufferOverflowException())]);
+        await Task.Delay(1200);
+        Check(repository.Total == 7, "Disposed watcher still dispatched refreshes.");
+    }
+    finally
+    {
+        Directory.Delete(path, true);
+    }
+}
+
+sealed class RecordingRepository : IRepository
+{
+    public int Total => Volatile.Read(ref _total);
+    public TaskCompletionSource Recovered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public bool MayHaveSubmodules() => false;
+    public void RefreshBranches() => Record();
+    public void RefreshWorktrees() => Record();
+    public void RefreshTags() => Record();
+    public void RefreshCommits() => Record();
+    public void RefreshSubmodules() => Record();
+    public void RefreshWorkingCopyChanges() => Record();
+    public void RefreshStashes() => Record();
+    private void Record()
+    {
+        if (Interlocked.Increment(ref _total) == 7)
+            Recovered.TrySetResult();
+    }
+    private int _total;
 }
