@@ -6,13 +6,15 @@ This document shows the translation status of each locale file in the repository
 
 ### ![en_US](https://img.shields.io/badge/en__US-%E2%88%9A-brightgreen)
 
-### ![ca__ES](https://img.shields.io/badge/ca__ES-98.27%25-yellow)
+### ![ca__ES](https://img.shields.io/badge/ca__ES-97.30%25-yellow)
 
 <details>
 <summary>Missing keys in ca_ES.axaml</summary>
 
 - Text.Apply.CommitChanges
 - Text.Apply.CommitChanges.Tip
+- Text.CommitDetail.Changes.Message.Collapse
+- Text.CommitDetail.Changes.Message.Expand
 - Text.CopyWithText
 - Text.DeleteBranch.DeleteAttachedWorktree
 - Text.EditApiKey
@@ -21,19 +23,28 @@ This document shows the translation status of each locale file in the repository
 - Text.EditApiKey.InvalidStorage
 - Text.EditApiKey.Server
 - Text.EditApiKey.Storage
+- Text.Histories.NavigateBack
+- Text.Histories.NavigateForward
+- Text.Histories.NavigateHome
 - Text.Histories.Header.Branches
 - Text.Histories.Header.Subject
 - Text.Histories.Header.Tree
+- Text.Histories.QuickSearch
+- Text.Histories.QuickSearch.Filter
+- Text.Histories.QuickSearch.Next
+- Text.Histories.QuickSearch.Previous
 - Text.InProgress.Am
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology.Tip
+- Text.Preferences.General.RefreshThrottling
+- Text.Repository.FocusOnCurrentBranch
 - Text.Repository.HistoriesLayout.WideDetails
 - Text.Repository.Search.Mixed
 - Text.Repository.Search.Mixed.Tip
 
 </details>
 
-### ![de__DE](https://img.shields.io/badge/de__DE-92.28%25-yellow)
+### ![de__DE](https://img.shields.io/badge/de__DE-91.37%25-yellow)
 
 <details>
 <summary>Missing keys in de_DE.axaml</summary>
@@ -51,6 +62,8 @@ This document shows the translation status of each locale file in the repository
 - Text.CheckoutAsWorktree.Tracking
 - Text.CheckoutAsWorktree.WorktreePath
 - Text.CheckoutAsWorktree.WorktreePath.Placeholder
+- Text.CommitDetail.Changes.Message.Collapse
+- Text.CommitDetail.Changes.Message.Expand
 - Text.CommitDetail.Files.Tips
 - Text.CopyWithText
 - Text.Dashboard
@@ -66,10 +79,17 @@ This document shows the translation status of each locale file in the repository
 - Text.File.HexViewer
 - Text.File.HexViewer.GotoAddress
 - Text.Histories.AdvancedOptions
+- Text.Histories.NavigateBack
+- Text.Histories.NavigateForward
+- Text.Histories.NavigateHome
 - Text.Histories.Header.Branches
 - Text.Histories.Header.Subject
 - Text.Histories.Header.Tree
 - Text.Histories.HighlightsInGraph.SelectedCommitsOnlyFirstParent
+- Text.Histories.QuickSearch
+- Text.Histories.QuickSearch.Filter
+- Text.Histories.QuickSearch.Next
+- Text.Histories.QuickSearch.Previous
 - Text.Hotkeys.Repo.ToggleCommitDetailPanel
 - Text.Hotkeys.Repo.ToggleSearchCommits
 - Text.Hotkeys.Repo.ViewDashboard
@@ -80,9 +100,11 @@ This document shows the translation status of each locale file in the repository
 - Text.Preferences.AI.ReasoningEffortLevel
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology.Tip
+- Text.Preferences.General.RefreshThrottling
 - Text.Preferences.Shell.Args.ToolTip
 - Text.Remote.ResetPushURL
 - Text.RemoteCM.SetPushURL
+- Text.Repository.FocusOnCurrentBranch
 - Text.Repository.HistoriesLayout.WideDetails
 - Text.Repository.Search.Mixed
 - Text.Repository.Search.Mixed.Tip
@@ -126,7 +148,7 @@ This document shows the translation status of each locale file in the repository
 
 </details>
 
-### ![el__GR](https://img.shields.io/badge/el__GR-91.83%25-yellow)
+### ![el__GR](https://img.shields.io/badge/el__GR-90.92%25-yellow)
 
 <details>
 <summary>Missing keys in el_GR.axaml</summary>
@@ -144,6 +166,8 @@ This document shows the translation status of each locale file in the repository
 - Text.CheckoutAsWorktree.Tracking
 - Text.CheckoutAsWorktree.WorktreePath
 - Text.CheckoutAsWorktree.WorktreePath.Placeholder
+- Text.CommitDetail.Changes.Message.Collapse
+- Text.CommitDetail.Changes.Message.Expand
 - Text.CommitDetail.Files.Tips
 - Text.CopyWithText
 - Text.Dashboard
@@ -159,10 +183,17 @@ This document shows the translation status of each locale file in the repository
 - Text.File.HexViewer
 - Text.File.HexViewer.GotoAddress
 - Text.Histories.AdvancedOptions
+- Text.Histories.NavigateBack
+- Text.Histories.NavigateForward
+- Text.Histories.NavigateHome
 - Text.Histories.Header.Branches
 - Text.Histories.Header.Subject
 - Text.Histories.Header.Tree
 - Text.Histories.HighlightsInGraph.SelectedCommitsOnlyFirstParent
+- Text.Histories.QuickSearch
+- Text.Histories.QuickSearch.Filter
+- Text.Histories.QuickSearch.Next
+- Text.Histories.QuickSearch.Previous
 - Text.Hotkeys.Repo.ToggleCommitDetailPanel
 - Text.Hotkeys.Repo.ToggleSearchCommits
 - Text.Hotkeys.Repo.ViewDashboard
@@ -174,12 +205,14 @@ This document shows the translation status of each locale file in the repository
 - Text.Preferences.AI.ReasoningEffortLevel
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology.Tip
+- Text.Preferences.General.RefreshThrottling
 - Text.Preferences.Shell.Args.ToolTip
 - Text.Remote.ResetPushURL
 - Text.RemoteCM.SetPushURL
 - Text.Repository.FilterCommits.Collapse
 - Text.Repository.FilterCommits.Expand
 - Text.Repository.FilterCommits.Summary
+- Text.Repository.FocusOnCurrentBranch
 - Text.Repository.HistoriesLayout.WideDetails
 - Text.Repository.Search.Mixed
 - Text.Repository.Search.Mixed.Tip
@@ -224,27 +257,38 @@ This document shows the translation status of each locale file in the repository
 
 </details>
 
-### ![es__ES](https://img.shields.io/badge/es__ES-98.91%25-yellow)
+### ![es__ES](https://img.shields.io/badge/es__ES-97.93%25-yellow)
 
 <details>
 <summary>Missing keys in es_ES.axaml</summary>
 
 - Text.Apply.CommitChanges
 - Text.Apply.CommitChanges.Tip
+- Text.CommitDetail.Changes.Message.Collapse
+- Text.CommitDetail.Changes.Message.Expand
 - Text.CopyWithText
+- Text.Histories.NavigateBack
+- Text.Histories.NavigateForward
+- Text.Histories.NavigateHome
 - Text.Histories.Header.Branches
 - Text.Histories.Header.Subject
 - Text.Histories.Header.Tree
+- Text.Histories.QuickSearch
+- Text.Histories.QuickSearch.Filter
+- Text.Histories.QuickSearch.Next
+- Text.Histories.QuickSearch.Previous
 - Text.InProgress.Am
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology.Tip
+- Text.Preferences.General.RefreshThrottling
+- Text.Repository.FocusOnCurrentBranch
 - Text.Repository.HistoriesLayout.WideDetails
 - Text.Repository.Search.Mixed
 - Text.Repository.Search.Mixed.Tip
 
 </details>
 
-### ![fr__FR](https://img.shields.io/badge/fr__FR-88.19%25-yellow)
+### ![fr__FR](https://img.shields.io/badge/fr__FR-87.32%25-yellow)
 
 <details>
 <summary>Missing keys in fr_FR.axaml</summary>
@@ -272,6 +316,8 @@ This document shows the translation status of each locale file in the repository
 - Text.CheckoutDetached.Warning
 - Text.CommitCM.CopyAuthorTime
 - Text.CommitCM.CopyCommitterTime
+- Text.CommitDetail.Changes.Message.Collapse
+- Text.CommitDetail.Changes.Message.Expand
 - Text.CommitDetail.Files.Tips
 - Text.Configure.Git.EnableRecursiveWhenAutoUpdatingSubmodules
 - Text.CopyWithText
@@ -304,10 +350,17 @@ This document shows the translation status of each locale file in the repository
 - Text.GitFlow.StartAt
 - Text.GitFlow.StartName
 - Text.Histories.AdvancedOptions
+- Text.Histories.NavigateBack
+- Text.Histories.NavigateForward
+- Text.Histories.NavigateHome
 - Text.Histories.Header.Branches
 - Text.Histories.Header.Subject
 - Text.Histories.Header.Tree
 - Text.Histories.HighlightsInGraph.SelectedCommitsOnlyFirstParent
+- Text.Histories.QuickSearch
+- Text.Histories.QuickSearch.Filter
+- Text.Histories.QuickSearch.Next
+- Text.Histories.QuickSearch.Previous
 - Text.Hotkeys.Repo.ToggleCommitDetailPanel
 - Text.Hotkeys.Repo.ToggleSearchCommits
 - Text.Hotkeys.Repo.ViewDashboard
@@ -323,6 +376,7 @@ This document shows the translation status of each locale file in the repository
 - Text.Preferences.AI.ReasoningEffortLevel
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology.Tip
+- Text.Preferences.General.RefreshThrottling
 - Text.Preferences.General.UseCompactBranchNames
 - Text.Preferences.Shell.Args.ToolTip
 - Text.Rebase.Test
@@ -334,6 +388,7 @@ This document shows the translation status of each locale file in the repository
 - Text.Repository.FilterCommits.Collapse
 - Text.Repository.FilterCommits.Expand
 - Text.Repository.FilterCommits.Summary
+- Text.Repository.FocusOnCurrentBranch
 - Text.Repository.HistoriesLayout.WideDetails
 - Text.Repository.Search.Mixed
 - Text.Repository.Search.Mixed.Tip
@@ -382,7 +437,7 @@ This document shows the translation status of each locale file in the repository
 
 </details>
 
-### ![he__IL](https://img.shields.io/badge/he__IL-88.19%25-yellow)
+### ![he__IL](https://img.shields.io/badge/he__IL-87.32%25-yellow)
 
 <details>
 <summary>Missing keys in he_IL.axaml</summary>
@@ -410,6 +465,8 @@ This document shows the translation status of each locale file in the repository
 - Text.CheckoutDetached.Warning
 - Text.CommitCM.CopyAuthorTime
 - Text.CommitCM.CopyCommitterTime
+- Text.CommitDetail.Changes.Message.Collapse
+- Text.CommitDetail.Changes.Message.Expand
 - Text.CommitDetail.Files.Tips
 - Text.Configure.Git.EnableRecursiveWhenAutoUpdatingSubmodules
 - Text.CopyWithText
@@ -442,10 +499,17 @@ This document shows the translation status of each locale file in the repository
 - Text.GitFlow.StartAt
 - Text.GitFlow.StartName
 - Text.Histories.AdvancedOptions
+- Text.Histories.NavigateBack
+- Text.Histories.NavigateForward
+- Text.Histories.NavigateHome
 - Text.Histories.Header.Branches
 - Text.Histories.Header.Subject
 - Text.Histories.Header.Tree
 - Text.Histories.HighlightsInGraph.SelectedCommitsOnlyFirstParent
+- Text.Histories.QuickSearch
+- Text.Histories.QuickSearch.Filter
+- Text.Histories.QuickSearch.Next
+- Text.Histories.QuickSearch.Previous
 - Text.Hotkeys.Repo.ToggleCommitDetailPanel
 - Text.Hotkeys.Repo.ToggleSearchCommits
 - Text.Hotkeys.Repo.ViewDashboard
@@ -461,6 +525,7 @@ This document shows the translation status of each locale file in the repository
 - Text.Preferences.AI.ReasoningEffortLevel
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology.Tip
+- Text.Preferences.General.RefreshThrottling
 - Text.Preferences.General.UseCompactBranchNames
 - Text.Preferences.Shell.Args.ToolTip
 - Text.Rebase.Test
@@ -472,6 +537,7 @@ This document shows the translation status of each locale file in the repository
 - Text.Repository.FilterCommits.Collapse
 - Text.Repository.FilterCommits.Expand
 - Text.Repository.FilterCommits.Summary
+- Text.Repository.FocusOnCurrentBranch
 - Text.Repository.HistoriesLayout.WideDetails
 - Text.Repository.Search.Mixed
 - Text.Repository.Search.Mixed.Tip
@@ -520,7 +586,7 @@ This document shows the translation status of each locale file in the repository
 
 </details>
 
-### ![id__ID](https://img.shields.io/badge/id__ID-92.28%25-yellow)
+### ![id__ID](https://img.shields.io/badge/id__ID-91.37%25-yellow)
 
 <details>
 <summary>Missing keys in id_ID.axaml</summary>
@@ -538,6 +604,8 @@ This document shows the translation status of each locale file in the repository
 - Text.CheckoutAsWorktree.Tracking
 - Text.CheckoutAsWorktree.WorktreePath
 - Text.CheckoutAsWorktree.WorktreePath.Placeholder
+- Text.CommitDetail.Changes.Message.Collapse
+- Text.CommitDetail.Changes.Message.Expand
 - Text.CommitDetail.Files.Tips
 - Text.CopyWithText
 - Text.Dashboard
@@ -553,10 +621,17 @@ This document shows the translation status of each locale file in the repository
 - Text.File.HexViewer
 - Text.File.HexViewer.GotoAddress
 - Text.Histories.AdvancedOptions
+- Text.Histories.NavigateBack
+- Text.Histories.NavigateForward
+- Text.Histories.NavigateHome
 - Text.Histories.Header.Branches
 - Text.Histories.Header.Subject
 - Text.Histories.Header.Tree
 - Text.Histories.HighlightsInGraph.SelectedCommitsOnlyFirstParent
+- Text.Histories.QuickSearch
+- Text.Histories.QuickSearch.Filter
+- Text.Histories.QuickSearch.Next
+- Text.Histories.QuickSearch.Previous
 - Text.Hotkeys.Repo.ToggleCommitDetailPanel
 - Text.Hotkeys.Repo.ToggleSearchCommits
 - Text.Hotkeys.Repo.ViewDashboard
@@ -566,9 +641,11 @@ This document shows the translation status of each locale file in the repository
 - Text.Preferences.AI.ReasoningEffortLevel
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology.Tip
+- Text.Preferences.General.RefreshThrottling
 - Text.Preferences.Shell.Args.ToolTip
 - Text.Remote.ResetPushURL
 - Text.RemoteCM.SetPushURL
+- Text.Repository.FocusOnCurrentBranch
 - Text.Repository.HistoriesLayout.WideDetails
 - Text.Repository.Search.Mixed
 - Text.Repository.Search.Mixed.Tip
@@ -613,7 +690,7 @@ This document shows the translation status of each locale file in the repository
 
 </details>
 
-### ![it__IT](https://img.shields.io/badge/it__IT-82.38%25-yellow)
+### ![it__IT](https://img.shields.io/badge/it__IT-81.56%25-yellow)
 
 <details>
 <summary>Missing keys in it_IT.axaml</summary>
@@ -655,6 +732,8 @@ This document shows the translation status of each locale file in the repository
 - Text.CommandPalette.RevisionFiles
 - Text.CommitCM.CopyAuthorTime
 - Text.CommitCM.CopyCommitterTime
+- Text.CommitDetail.Changes.Message.Collapse
+- Text.CommitDetail.Changes.Message.Expand
 - Text.CommitDetail.CollapseToBottom
 - Text.CommitDetail.Files.Tips
 - Text.Compare.Changes
@@ -700,6 +779,9 @@ This document shows the translation status of each locale file in the repository
 - Text.GitFlow.StartName
 - Text.GotoRevisionSelector
 - Text.Histories.AdvancedOptions
+- Text.Histories.NavigateBack
+- Text.Histories.NavigateForward
+- Text.Histories.NavigateHome
 - Text.Histories.Header.Branches
 - Text.Histories.Header.Subject
 - Text.Histories.Header.Tree
@@ -709,6 +791,10 @@ This document shows the translation status of each locale file in the repository
 - Text.Histories.HighlightsInGraph.CurrentBranchAndSelectedCommits
 - Text.Histories.HighlightsInGraph.SelectedCommitsOnly
 - Text.Histories.HighlightsInGraph.SelectedCommitsOnlyFirstParent
+- Text.Histories.QuickSearch
+- Text.Histories.QuickSearch.Filter
+- Text.Histories.QuickSearch.Next
+- Text.Histories.QuickSearch.Previous
 - Text.Histories.ShowColumns
 - Text.HistoriesDetailsStandalone
 - Text.HistoriesDetailsStandalone.CommitDetail
@@ -742,6 +828,7 @@ This document shows the translation status of each locale file in the repository
 - Text.Preferences.AI.ReasoningEffortLevel
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology.Tip
+- Text.Preferences.General.RefreshThrottling
 - Text.Preferences.General.ShowRelativeTimeInGraph
 - Text.Preferences.General.Use24Hours
 - Text.Preferences.General.UseCompactBranchNames
@@ -758,6 +845,7 @@ This document shows the translation status of each locale file in the repository
 - Text.Repository.FilterCommits.Collapse
 - Text.Repository.FilterCommits.Expand
 - Text.Repository.FilterCommits.Summary
+- Text.Repository.FocusOnCurrentBranch
 - Text.Repository.HistoriesLayout.WideDetails
 - Text.Repository.Search.Mixed
 - Text.Repository.Search.Mixed.Tip
@@ -815,7 +903,7 @@ This document shows the translation status of each locale file in the repository
 
 </details>
 
-### ![ja__JP](https://img.shields.io/badge/ja__JP-96.19%25-yellow)
+### ![ja__JP](https://img.shields.io/badge/ja__JP-95.23%25-yellow)
 
 <details>
 <summary>Missing keys in ja_JP.axaml</summary>
@@ -831,6 +919,8 @@ This document shows the translation status of each locale file in the repository
 - Text.CheckoutAsWorktree.Tracking
 - Text.CheckoutAsWorktree.WorktreePath
 - Text.CheckoutAsWorktree.WorktreePath.Placeholder
+- Text.CommitDetail.Changes.Message.Collapse
+- Text.CommitDetail.Changes.Message.Expand
 - Text.CommitDetail.Files.Tips
 - Text.CopyWithText
 - Text.DeleteBranch.DeleteAttachedWorktree
@@ -840,13 +930,22 @@ This document shows the translation status of each locale file in the repository
 - Text.EditApiKey.InvalidStorage
 - Text.EditApiKey.Server
 - Text.EditApiKey.Storage
+- Text.Histories.NavigateBack
+- Text.Histories.NavigateForward
+- Text.Histories.NavigateHome
 - Text.Histories.Header.Branches
 - Text.Histories.Header.Subject
 - Text.Histories.Header.Tree
+- Text.Histories.QuickSearch
+- Text.Histories.QuickSearch.Filter
+- Text.Histories.QuickSearch.Next
+- Text.Histories.QuickSearch.Previous
 - Text.InProgress.Am
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology.Tip
+- Text.Preferences.General.RefreshThrottling
 - Text.Preferences.Shell.Args.ToolTip
+- Text.Repository.FocusOnCurrentBranch
 - Text.Repository.HistoriesLayout.WideDetails
 - Text.Repository.Search.Mixed
 - Text.Repository.Search.Mixed.Tip
@@ -865,7 +964,7 @@ This document shows the translation status of each locale file in the repository
 
 </details>
 
-### ![ko__KR](https://img.shields.io/badge/ko__KR-89.55%25-yellow)
+### ![ko__KR](https://img.shields.io/badge/ko__KR-88.67%25-yellow)
 
 <details>
 <summary>Missing keys in ko_KR.axaml</summary>
@@ -888,6 +987,8 @@ This document shows the translation status of each locale file in the repository
 - Text.CheckoutDetached
 - Text.CheckoutDetached.Target
 - Text.CheckoutDetached.Warning
+- Text.CommitDetail.Changes.Message.Collapse
+- Text.CommitDetail.Changes.Message.Expand
 - Text.CommitDetail.Files.Tips
 - Text.Configure.Git.EnableRecursiveWhenAutoUpdatingSubmodules
 - Text.CopyWithText
@@ -919,10 +1020,17 @@ This document shows the translation status of each locale file in the repository
 - Text.GitFlow.StartAt
 - Text.GitFlow.StartName
 - Text.Histories.AdvancedOptions
+- Text.Histories.NavigateBack
+- Text.Histories.NavigateForward
+- Text.Histories.NavigateHome
 - Text.Histories.Header.Branches
 - Text.Histories.Header.Subject
 - Text.Histories.Header.Tree
 - Text.Histories.HighlightsInGraph.SelectedCommitsOnlyFirstParent
+- Text.Histories.QuickSearch
+- Text.Histories.QuickSearch.Filter
+- Text.Histories.QuickSearch.Next
+- Text.Histories.QuickSearch.Previous
 - Text.Hotkeys.Repo.ToggleCommitDetailPanel
 - Text.Hotkeys.Repo.ToggleSearchCommits
 - Text.Hotkeys.Repo.ViewDashboard
@@ -934,12 +1042,14 @@ This document shows the translation status of each locale file in the repository
 - Text.Preferences.AI.ReasoningEffortLevel
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology.Tip
+- Text.Preferences.General.RefreshThrottling
 - Text.Preferences.Shell.Args.ToolTip
 - Text.Remote.ResetPushURL
 - Text.RemoteCM.SetPushURL
 - Text.Repository.FilterCommits.Collapse
 - Text.Repository.FilterCommits.Expand
 - Text.Repository.FilterCommits.Summary
+- Text.Repository.FocusOnCurrentBranch
 - Text.Repository.HistoriesLayout.WideDetails
 - Text.Repository.Search.Mixed
 - Text.Repository.Search.Mixed.Tip
@@ -988,7 +1098,7 @@ This document shows the translation status of each locale file in the repository
 
 </details>
 
-### ![pt__BR](https://img.shields.io/badge/pt__BR-58.40%25-red)
+### ![pt__BR](https://img.shields.io/badge/pt__BR-57.82%25-red)
 
 <details>
 <summary>Missing keys in pt_BR.axaml</summary>
@@ -1063,6 +1173,8 @@ This document shows the translation status of each locale file in the repository
 - Text.CommitCM.Rebase
 - Text.CommitCM.Reset
 - Text.CommitDetail.Changes.Count
+- Text.CommitDetail.Changes.Message.Collapse
+- Text.CommitDetail.Changes.Message.Expand
 - Text.CommitDetail.CollapseToBottom
 - Text.CommitDetail.Files.Search
 - Text.CommitDetail.Files.Tips
@@ -1184,6 +1296,9 @@ This document shows the translation status of each locale file in the repository
 - Text.GitLFS.Locks.UnlockAllMyLocks.Confirm
 - Text.GotoRevisionSelector
 - Text.Histories.AdvancedOptions
+- Text.Histories.NavigateBack
+- Text.Histories.NavigateForward
+- Text.Histories.NavigateHome
 - Text.Histories.Header.Branches
 - Text.Histories.Header.Subject
 - Text.Histories.Header.Tree
@@ -1193,6 +1308,10 @@ This document shows the translation status of each locale file in the repository
 - Text.Histories.HighlightsInGraph.CurrentBranchAndSelectedCommits
 - Text.Histories.HighlightsInGraph.SelectedCommitsOnly
 - Text.Histories.HighlightsInGraph.SelectedCommitsOnlyFirstParent
+- Text.Histories.QuickSearch
+- Text.Histories.QuickSearch.Filter
+- Text.Histories.QuickSearch.Next
+- Text.Histories.QuickSearch.Previous
 - Text.Histories.ShowColumns
 - Text.HistoriesDetailsStandalone
 - Text.HistoriesDetailsStandalone.CommitDetail
@@ -1279,6 +1398,7 @@ This document shows the translation status of each locale file in the repository
 - Text.Preferences.DiffMerge.MergeArgs.Tip
 - Text.Preferences.General.DateFormat
 - Text.Preferences.General.EnableCompactFolders
+- Text.Preferences.General.RefreshThrottling
 - Text.Preferences.General.ShowChangesPageByDefault
 - Text.Preferences.General.ShowChangesTabInCommitDetailByDefault
 - Text.Preferences.General.ShowRelativeTimeInGraph
@@ -1314,6 +1434,7 @@ This document shows the translation status of each locale file in the repository
 - Text.Repository.FilterCommits.Collapse
 - Text.Repository.FilterCommits.Expand
 - Text.Repository.FilterCommits.Summary
+- Text.Repository.FocusOnCurrentBranch
 - Text.Repository.HistoriesLayout
 - Text.Repository.HistoriesLayout.Horizontal
 - Text.Repository.HistoriesLayout.Vertical
@@ -1454,13 +1575,15 @@ This document shows the translation status of each locale file in the repository
 
 </details>
 
-### ![ru__RU](https://img.shields.io/badge/ru__RU-98.18%25-yellow)
+### ![ru__RU](https://img.shields.io/badge/ru__RU-97.21%25-yellow)
 
 <details>
 <summary>Missing keys in ru_RU.axaml</summary>
 
 - Text.Apply.CommitChanges
 - Text.Apply.CommitChanges.Tip
+- Text.CommitDetail.Changes.Message.Collapse
+- Text.CommitDetail.Changes.Message.Expand
 - Text.CopyWithText
 - Text.DeleteBranch.DeleteAttachedWorktree
 - Text.EditApiKey
@@ -1469,20 +1592,29 @@ This document shows the translation status of each locale file in the repository
 - Text.EditApiKey.InvalidStorage
 - Text.EditApiKey.Server
 - Text.EditApiKey.Storage
+- Text.Histories.NavigateBack
+- Text.Histories.NavigateForward
+- Text.Histories.NavigateHome
 - Text.Histories.Header.Branches
 - Text.Histories.Header.Subject
 - Text.Histories.Header.Tree
+- Text.Histories.QuickSearch
+- Text.Histories.QuickSearch.Filter
+- Text.Histories.QuickSearch.Next
+- Text.Histories.QuickSearch.Previous
 - Text.InProgress.Am
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology.Tip
+- Text.Preferences.General.RefreshThrottling
 - Text.Preferences.Shell.Args.ToolTip
+- Text.Repository.FocusOnCurrentBranch
 - Text.Repository.HistoriesLayout.WideDetails
 - Text.Repository.Search.Mixed
 - Text.Repository.Search.Mixed.Tip
 
 </details>
 
-### ![ta__IN](https://img.shields.io/badge/ta__IN-59.95%25-red)
+### ![ta__IN](https://img.shields.io/badge/ta__IN-59.35%25-red)
 
 <details>
 <summary>Missing keys in ta_IN.axaml</summary>
@@ -1584,6 +1716,8 @@ This document shows the translation status of each locale file in the repository
 - Text.CommitCM.Rebase
 - Text.CommitCM.Reset
 - Text.CommitDetail.Changes.Count
+- Text.CommitDetail.Changes.Message.Collapse
+- Text.CommitDetail.Changes.Message.Expand
 - Text.CommitDetail.CollapseToBottom
 - Text.CommitDetail.Files.Tips
 - Text.CommitDetail.Info.CopyEmail
@@ -1693,6 +1827,9 @@ This document shows the translation status of each locale file in the repository
 - Text.GitLFS.Locks.UnlockAllMyLocks.Confirm
 - Text.GotoRevisionSelector
 - Text.Histories.AdvancedOptions
+- Text.Histories.NavigateBack
+- Text.Histories.NavigateForward
+- Text.Histories.NavigateHome
 - Text.Histories.Header.Branches
 - Text.Histories.Header.Subject
 - Text.Histories.Header.Tree
@@ -1702,6 +1839,10 @@ This document shows the translation status of each locale file in the repository
 - Text.Histories.HighlightsInGraph.CurrentBranchAndSelectedCommits
 - Text.Histories.HighlightsInGraph.SelectedCommitsOnly
 - Text.Histories.HighlightsInGraph.SelectedCommitsOnlyFirstParent
+- Text.Histories.QuickSearch
+- Text.Histories.QuickSearch.Filter
+- Text.Histories.QuickSearch.Next
+- Text.Histories.QuickSearch.Previous
 - Text.Histories.ShowColumns
 - Text.HistoriesDetailsStandalone
 - Text.HistoriesDetailsStandalone.CommitDetail
@@ -1776,6 +1917,7 @@ This document shows the translation status of each locale file in the repository
 - Text.Preferences.DiffMerge.MergeArgs
 - Text.Preferences.DiffMerge.MergeArgs.Tip
 - Text.Preferences.General.EnableCompactFolders
+- Text.Preferences.General.RefreshThrottling
 - Text.Preferences.General.ShowChangesPageByDefault
 - Text.Preferences.General.ShowChangesTabInCommitDetailByDefault
 - Text.Preferences.General.ShowRelativeTimeInGraph
@@ -1808,6 +1950,7 @@ This document shows the translation status of each locale file in the repository
 - Text.Repository.FilterCommits.Collapse
 - Text.Repository.FilterCommits.Expand
 - Text.Repository.FilterCommits.Summary
+- Text.Repository.FocusOnCurrentBranch
 - Text.Repository.HistoriesLayout.WideDetails
 - Text.Repository.OpenAsFolder
 - Text.Repository.Resolve
@@ -1931,7 +2074,7 @@ This document shows the translation status of each locale file in the repository
 
 </details>
 
-### ![uk__UA](https://img.shields.io/badge/uk__UA-60.67%25-red)
+### ![uk__UA](https://img.shields.io/badge/uk__UA-60.07%25-red)
 
 <details>
 <summary>Missing keys in uk_UA.axaml</summary>
@@ -2033,6 +2176,8 @@ This document shows the translation status of each locale file in the repository
 - Text.CommitCM.Rebase
 - Text.CommitCM.Reset
 - Text.CommitDetail.Changes.Count
+- Text.CommitDetail.Changes.Message.Collapse
+- Text.CommitDetail.Changes.Message.Expand
 - Text.CommitDetail.CollapseToBottom
 - Text.CommitDetail.Files.Tips
 - Text.CommitDetail.Info.CopyEmail
@@ -2138,6 +2283,9 @@ This document shows the translation status of each locale file in the repository
 - Text.GitLFS.Locks.UnlockAllMyLocks.Confirm
 - Text.GotoRevisionSelector
 - Text.Histories.AdvancedOptions
+- Text.Histories.NavigateBack
+- Text.Histories.NavigateForward
+- Text.Histories.NavigateHome
 - Text.Histories.Header.Branches
 - Text.Histories.Header.Subject
 - Text.Histories.Header.Tree
@@ -2147,6 +2295,10 @@ This document shows the translation status of each locale file in the repository
 - Text.Histories.HighlightsInGraph.CurrentBranchAndSelectedCommits
 - Text.Histories.HighlightsInGraph.SelectedCommitsOnly
 - Text.Histories.HighlightsInGraph.SelectedCommitsOnlyFirstParent
+- Text.Histories.QuickSearch
+- Text.Histories.QuickSearch.Filter
+- Text.Histories.QuickSearch.Next
+- Text.Histories.QuickSearch.Previous
 - Text.Histories.ShowColumns
 - Text.HistoriesDetailsStandalone
 - Text.HistoriesDetailsStandalone.CommitDetail
@@ -2221,6 +2373,7 @@ This document shows the translation status of each locale file in the repository
 - Text.Preferences.DiffMerge.MergeArgs
 - Text.Preferences.DiffMerge.MergeArgs.Tip
 - Text.Preferences.General.EnableCompactFolders
+- Text.Preferences.General.RefreshThrottling
 - Text.Preferences.General.ShowChangesPageByDefault
 - Text.Preferences.General.ShowChangesTabInCommitDetailByDefault
 - Text.Preferences.General.ShowRelativeTimeInGraph
@@ -2253,6 +2406,7 @@ This document shows the translation status of each locale file in the repository
 - Text.Repository.FilterCommits.Collapse
 - Text.Repository.FilterCommits.Expand
 - Text.Repository.FilterCommits.Summary
+- Text.Repository.FocusOnCurrentBranch
 - Text.Repository.HistoriesLayout.WideDetails
 - Text.Repository.OpenAsFolder
 - Text.Repository.Resolve
@@ -2372,30 +2526,42 @@ This document shows the translation status of each locale file in the repository
 
 </details>
 
-### ![zh__CN](https://img.shields.io/badge/zh__CN-99.18%25-yellow)
+### ![zh__CN](https://img.shields.io/badge/zh__CN-98.29%25-yellow)
 
 <details>
 <summary>Missing keys in zh_CN.axaml</summary>
 
+- Text.CommitDetail.Changes.Message.Collapse
+- Text.CommitDetail.Changes.Message.Expand
 - Text.CopyWithText
+- Text.Histories.NavigateBack
+- Text.Histories.NavigateForward
+- Text.Histories.NavigateHome
 - Text.Histories.Header.Branches
 - Text.Histories.Header.Subject
 - Text.Histories.Header.Tree
+- Text.Histories.QuickSearch
+- Text.Histories.QuickSearch.Filter
+- Text.Histories.QuickSearch.Next
+- Text.Histories.QuickSearch.Previous
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology.Tip
+- Text.Preferences.General.RefreshThrottling
 - Text.Repository.HistoriesLayout.WideDetails
 - Text.Repository.Search.Mixed
 - Text.Repository.Search.Mixed.Tip
 
 </details>
 
-### ![zh__TW](https://img.shields.io/badge/zh__TW-98.27%25-yellow)
+### ![zh__TW](https://img.shields.io/badge/zh__TW-97.30%25-yellow)
 
 <details>
 <summary>Missing keys in zh_TW.axaml</summary>
 
 - Text.Apply.CommitChanges
 - Text.Apply.CommitChanges.Tip
+- Text.CommitDetail.Changes.Message.Collapse
+- Text.CommitDetail.Changes.Message.Expand
 - Text.CopyWithText
 - Text.DeleteBranch.DeleteAttachedWorktree
 - Text.EditApiKey
@@ -2404,12 +2570,21 @@ This document shows the translation status of each locale file in the repository
 - Text.EditApiKey.InvalidStorage
 - Text.EditApiKey.Server
 - Text.EditApiKey.Storage
+- Text.Histories.NavigateBack
+- Text.Histories.NavigateForward
+- Text.Histories.NavigateHome
 - Text.Histories.Header.Branches
 - Text.Histories.Header.Subject
 - Text.Histories.Header.Tree
+- Text.Histories.QuickSearch
+- Text.Histories.QuickSearch.Filter
+- Text.Histories.QuickSearch.Next
+- Text.Histories.QuickSearch.Previous
 - Text.InProgress.Am
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology
 - Text.Preferences.Appearance.ExtendContextMenusWithHgTerminology.Tip
+- Text.Preferences.General.RefreshThrottling
+- Text.Repository.FocusOnCurrentBranch
 - Text.Repository.HistoriesLayout.WideDetails
 - Text.Repository.Search.Mixed
 - Text.Repository.Search.Mixed.Tip

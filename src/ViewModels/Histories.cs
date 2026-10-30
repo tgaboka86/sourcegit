@@ -12,7 +12,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace SourceGit.ViewModels
 {
-    public class Histories : ObservableObject, IDisposable
+    public partial class Histories : ObservableObject, IDisposable
     {
         public bool IsLoading
         {
@@ -76,6 +76,11 @@ namespace SourceGit.ViewModels
                     OnPropertyChanged();
                 }
             }
+        }
+
+        public bool CanToggleReflog
+        {
+            get => !_repo.UIStates.FocusOnCurrentBranch;
         }
 
         public bool IsAuthorColumnVisible
@@ -566,6 +571,7 @@ namespace SourceGit.ViewModels
 
         public void Dispose()
         {
+            SuspendNavigationVisits();
             CancelQuickSearch();
             Preferences.Instance.PropertyChanged -= OnPreferencesChanged;
         }
@@ -882,6 +888,7 @@ namespace SourceGit.ViewModels
 
         private void PostSelectedCommitsChanged()
         {
+            ScheduleNavigationVisit();
             OnPropertyChanged(nameof(QuickSearchStatus));
             if (_ignoreSelectionChange || _updatingSelection)
                 return;

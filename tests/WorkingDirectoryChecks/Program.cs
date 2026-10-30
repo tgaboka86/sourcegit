@@ -56,6 +56,8 @@ internal static class Program
             Git(fixture, "tag v1");
             File.WriteAllText(Path.Combine(fixture, "tracked.txt"), "edited\n");
             repo = new Repository(false, fixture, Path.Combine(fixture, ".git"));
+            repo.UIStates.IsBranchesColumnVisibleInHistory = false;
+            repo.UIStates.IsTreeColumnVisibleInHistory = false;
             repo.UIStates.HistoryColumnOrder = [2, 0, 1, 3, 4];
             repo.Open();
             window = new Window { Title = "SourceGit Working Directory Checks", Width = 1100, Height = 800,
@@ -320,7 +322,7 @@ internal static class Program
         var vm = repo.Histories;
         var list = window.GetVisualDescendants().OfType<Views.HistoriesCommitList>().Single();
         var column = list.Columns[5];
-        Check(!vm.IsBranchesColumnVisible && !column.IsVisible, "branches column is opt-in");
+        Check(!vm.IsBranchesColumnVisible && !column.IsVisible, "fixture starts with branches column hidden");
         var message = list.GetVisualDescendants().OfType<Views.CommitMessagePanel>().Single();
         Check(!message.RefsAfterSubject && message.Children[0].Bounds.Right <= message.Children[1].Bounds.Left,
             "message refs precede the subject when the branch column is hidden");
@@ -454,7 +456,7 @@ internal static class Program
         var originalOrder = list.Columns.OrderBy(x => x.DisplayIndex).ToArray();
         var commit = vm.Commits[0];
         var originalMargin = commit.LeftMargin;
-        Check(!vm.IsTreeColumnVisible && !tree.IsVisible, "tree column is opt-in");
+        Check(!vm.IsTreeColumnVisible && !tree.IsVisible, "fixture starts with tree column hidden");
         try
         {
             vm.IsTreeColumnVisible = true;
@@ -501,7 +503,7 @@ internal static class Program
     private static void CheckHeadPreference(string fixture)
     {
         var pref = Preferences.Instance;
-        Check(pref.WorkingDirectoryHeadMode == 0 && new Preferences().WorkingDirectoryHeadMode == 0, "existing preferences default to Hide");
+        Check(pref.WorkingDirectoryHeadMode == 2 && new Preferences().WorkingDirectoryHeadMode == 2, "existing preferences default to Always");
         pref.SetCanModify();
         foreach (var mode in new[] { 0, 1, 2 })
         {

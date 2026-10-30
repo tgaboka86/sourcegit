@@ -527,6 +527,9 @@
   <x:String x:Key="Text.GitLFS.TrackByExtension" xml:space="preserve">Track all *{0} files</x:String>
   <x:String x:Key="Text.GotoRevisionSelector" xml:space="preserve">Select Commit</x:String>
   <x:String x:Key="Text.Histories.AdvancedOptions" xml:space="preserve">Advanced Options</x:String>
+  <x:String x:Key="Text.Histories.NavigateBack" xml:space="preserve">Back</x:String>
+  <x:String x:Key="Text.Histories.NavigateForward" xml:space="preserve">Forward</x:String>
+  <x:String x:Key="Text.Histories.NavigateHome" xml:space="preserve">Go to current HEAD</x:String>
   <x:String x:Key="Text.Histories.Header.Author" xml:space="preserve">AUTHOR</x:String>
   <x:String x:Key="Text.Histories.Header.AuthorTime" xml:space="preserve">AUTHOR TIME</x:String>
   <x:String x:Key="Text.Histories.Header.Branches" xml:space="preserve">BRANCHES</x:String>
@@ -847,6 +850,11 @@
   <x:String x:Key="Text.Repository.FilterCommits.Expand" xml:space="preserve">Expand Filters</x:String>
   <x:String x:Key="Text.Repository.FilterCommits.Include" xml:space="preserve">Filter in commit graph</x:String>
   <x:String x:Key="Text.Repository.FilterCommits.Summary" xml:space="preserve">filter(s) enabled</x:String>
+  <x:String x:Key="Text.Repository.FocusOnCurrentBranch" xml:space="preserve">Focus on Current Branch
+
+When this is toggled, all history filters will be cleared. And only commits belong to the current branch or its upstream (if it has one) will be listed in `Dashboard` page.
+
+Manually add a branch/tag history filter will disable this feature automatically.</x:String>
   <x:String x:Key="Text.Repository.HistoriesLayout" xml:space="preserve">LAYOUT</x:String>
   <x:String x:Key="Text.Repository.HistoriesLayout.Horizontal" xml:space="preserve">Horizontal</x:String>
   <x:String x:Key="Text.Repository.HistoriesLayout.Vertical" xml:space="preserve">Vertical</x:String>
