@@ -458,6 +458,12 @@ namespace SourceGit.ViewModels
 
         public void Open()
         {
+            _historyFilterMode = _uiStates.GetHistoryFilterMode();
+            _histories = new Histories(this);
+            _workingCopy = new WorkingCopy(this) { CommitMessage = _uiStates.LastCommitMessage };
+            _stashesPage = new StashesPage(this);
+            _selectedViewIndex = Preferences.Instance.ShowLocalChangesByDefault ? 1 : 0;
+            _refreshes = new Models.RefreshCoordinator(ex => SendNotification($"Failed to refresh repository: {ex.Message}", true));
             try
             {
                 _watcher = new Models.Watcher(this, FullPath, _gitCommonDir);
@@ -467,11 +473,6 @@ namespace SourceGit.ViewModels
                 SendNotification($"Failed to start watcher for repository: '{FullPath}'. You may need to press 'F5' to refresh repository manually!\n\nReason: {ex.Message}", true);
             }
 
-            _historyFilterMode = _uiStates.GetHistoryFilterMode();
-            _histories = new Histories(this);
-            _workingCopy = new WorkingCopy(this) { CommitMessage = _uiStates.LastCommitMessage };
-            _stashesPage = new StashesPage(this);
-            _selectedViewIndex = Preferences.Instance.ShowLocalChangesByDefault ? 1 : 0;
             _lastFetchTime = DateTime.Now;
             _autoFetchTimer = new Timer(AutoFetchByTimer, null, 5000, 5000);
             RefreshAll();
@@ -486,18 +487,8 @@ namespace SourceGit.ViewModels
             _uiStates.LastCommitMessage = commitMessage;
             _uiStates.Save();
 
-            if (_cancellationRefreshBranches is { IsCancellationRequested: false })
-                _cancellationRefreshBranches.Cancel();
-            if (_cancellationRefreshTags is { IsCancellationRequested: false })
-                _cancellationRefreshTags.Cancel();
-            if (_cancellationRefreshWorkingCopyChanges is { IsCancellationRequested: false })
-                _cancellationRefreshWorkingCopyChanges.Cancel();
-            if (_cancellationRefreshCommits is { IsCancellationRequested: false })
-                _cancellationRefreshCommits.Cancel();
-            if (_cancellationRefreshStashes is { IsCancellationRequested: false })
-                _cancellationRefreshStashes.Cancel();
-
             _watcher?.Dispose();
+            _refreshes.Dispose();
             _autoFetchTimer.Dispose();
         }
 
@@ -651,18 +642,22 @@ namespace SourceGit.ViewModels
             RefreshWorkingCopyChanges();
             RefreshStashes();
 
-            Task.Run(async () =>
-            {
-                var issuetrackers = new List<Models.IssueTracker>();
-                await new Commands.IssueTracker(FullPath, true).ReadAllAsync(issuetrackers, true).ConfigureAwait(false);
-                await new Commands.IssueTracker(FullPath, false).ReadAllAsync(issuetrackers, false).ConfigureAwait(false);
-                Dispatcher.UIThread.Post(() =>
-                {
-                    IssueTrackers.Clear();
-                    IssueTrackers.AddRange(issuetrackers);
-                });
+            _refreshes?.Request(Models.RefreshKind.Configuration, RefreshConfigurationAsync);
+        }
 
-                var config = await new Commands.Config(FullPath).ReadAllAsync().ConfigureAwait(false);
+        private async Task RefreshConfigurationAsync(Models.RefreshCoordinator.Context context)
+        {
+            var issuetrackers = new List<Models.IssueTracker>();
+            await new Commands.IssueTracker(FullPath, true).WithCancellation(context.CancellationToken).ReadAllAsync(issuetrackers, true).ConfigureAwait(false);
+            await new Commands.IssueTracker(FullPath, false).WithCancellation(context.CancellationToken).ReadAllAsync(issuetrackers, false).ConfigureAwait(false);
+            var config = await new Commands.Config(FullPath).WithCancellation(context.CancellationToken).ReadAllAsync().ConfigureAwait(false);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (!context.IsCurrent)
+                    return;
+
+                IssueTrackers.Clear();
+                IssueTrackers.AddRange(issuetrackers);
                 _hasAllowedSignersFile = config.TryGetValue("gpg.ssh.allowedsignersfile", out var allowedSignersFile) && !string.IsNullOrEmpty(allowedSignersFile);
                 GitFlow.Parse(config);
             });
@@ -1167,93 +1162,95 @@ namespace SourceGit.ViewModels
 
         public void RefreshBranches()
         {
-            if (_cancellationRefreshBranches is { IsCancellationRequested: false })
-                _cancellationRefreshBranches.Cancel();
+            _refreshes?.Request(Models.RefreshKind.Branches, RefreshBranchesAsync);
+        }
 
-            _cancellationRefreshBranches = new CancellationTokenSource();
-            var token = _cancellationRefreshBranches.Token;
+        private async Task RefreshBranchesAsync(Models.RefreshCoordinator.Context context)
+        {
+            var branches = await new Commands.QueryBranches(FullPath).WithCancellation(context.CancellationToken).GetResultAsync().ConfigureAwait(false);
+            context.CancellationToken.ThrowIfCancellationRequested();
+            var remotes = await new Commands.QueryRemotes(FullPath).GetResultAsync().ConfigureAwait(false);
+            var builder = BuildBranchTree(branches, remotes);
 
-            Task.Run(async () =>
+            Dispatcher.UIThread.Invoke(() =>
             {
-                var branches = await new Commands.QueryBranches(FullPath).GetResultAsync().ConfigureAwait(false);
-                var remotes = await new Commands.QueryRemotes(FullPath).GetResultAsync().ConfigureAwait(false);
-                var builder = BuildBranchTree(branches, remotes);
+                if (!context.IsCurrent)
+                    return;
 
-                Dispatcher.UIThread.Invoke(() =>
+                Remotes = remotes;
+                Branches = branches;
+                CurrentBranch = branches.Find(x => x.IsCurrent);
+                LocalBranchTrees = builder.Locals;
+                RemoteBranchTrees = builder.Remotes;
+
+                ValidateHistoryFilters(true);
+
+                var localBranchesCount = 0;
+                foreach (var b in branches)
                 {
-                    if (token.IsCancellationRequested)
-                        return;
+                    if (b.IsLocal && !b.IsDetachedHead)
+                        localBranchesCount++;
+                }
+                LocalBranchesCount = localBranchesCount;
 
-                    Remotes = remotes;
-                    Branches = branches;
-                    CurrentBranch = branches.Find(x => x.IsCurrent);
-                    LocalBranchTrees = builder.Locals;
-                    RemoteBranchTrees = builder.Remotes;
+                if (_workingCopy != null)
+                    _workingCopy.HasRemotes = remotes.Count > 0;
 
-                    ValidateHistoryFilters(true);
-
-                    var localBranchesCount = 0;
-                    foreach (var b in branches)
-                    {
-                        if (b.IsLocal && !b.IsDetachedHead)
-                            localBranchesCount++;
-                    }
-                    LocalBranchesCount = localBranchesCount;
-
-                    if (_workingCopy != null)
-                        _workingCopy.HasRemotes = remotes.Count > 0;
-
-                    var hasPendingPullOrPush = CurrentBranch?.IsTrackStatusVisible ?? false;
-                    GetOwnerPage()?.ChangeDirtyState(Models.DirtyState.HasPendingPullOrPush, !hasPendingPullOrPush);
-                });
-            }, token);
+                var hasPendingPullOrPush = CurrentBranch?.IsTrackStatusVisible ?? false;
+                GetOwnerPage()?.ChangeDirtyState(Models.DirtyState.HasPendingPullOrPush, !hasPendingPullOrPush);
+            });
         }
 
         public void RefreshWorktrees()
         {
-            Task.Run(async () =>
+            _refreshes?.Request(Models.RefreshKind.Worktrees, RefreshWorktreesAsync);
+        }
+
+        private async Task RefreshWorktreesAsync(Models.RefreshCoordinator.Context context)
+        {
+            var worktrees = await new Commands.Worktree(FullPath).WithCancellation(context.CancellationToken).ReadAllAsync().ConfigureAwait(false);
+            var cleaned = Worktree.Build(FullPath, worktrees);
+            Dispatcher.UIThread.Invoke(() =>
             {
-                var worktrees = await new Commands.Worktree(FullPath).ReadAllAsync().ConfigureAwait(false);
-                var cleaned = Worktree.Build(FullPath, worktrees);
-                Dispatcher.UIThread.Invoke(() => Worktrees = cleaned);
+                if (context.IsCurrent)
+                    Worktrees = cleaned;
             });
         }
 
         public void RefreshTags()
         {
-            if (_cancellationRefreshTags is { IsCancellationRequested: false })
-                _cancellationRefreshTags.Cancel();
+            _refreshes?.Request(Models.RefreshKind.Tags, RefreshTagsAsync);
+        }
 
-            _cancellationRefreshTags = new CancellationTokenSource();
-            var token = _cancellationRefreshTags.Token;
-
-            Task.Run(async () =>
+        private async Task RefreshTagsAsync(Models.RefreshCoordinator.Context context)
+        {
+            var tags = await new Commands.QueryTags(FullPath).WithCancellation(context.CancellationToken).GetResultAsync().ConfigureAwait(false);
+            Dispatcher.UIThread.Invoke(() =>
             {
-                var tags = await new Commands.QueryTags(FullPath).GetResultAsync().ConfigureAwait(false);
-                Dispatcher.UIThread.Invoke(() =>
-                {
-                    if (token.IsCancellationRequested)
-                        return;
+                if (!context.IsCurrent)
+                    return;
 
-                    Tags = tags;
-                    VisibleTags = BuildVisibleTags();
-                    ValidateHistoryFilters(false);
-                });
-            }, token);
+                Tags = tags;
+                VisibleTags = BuildVisibleTags();
+                ValidateHistoryFilters(false);
+            });
         }
 
         public void RefreshCommits()
         {
-            if (_cancellationRefreshCommits is { IsCancellationRequested: false })
-                _cancellationRefreshCommits.Cancel();
+            _refreshes?.Request(Models.RefreshKind.Commits, RefreshCommitsAsync);
+        }
 
-            _cancellationRefreshCommits = new CancellationTokenSource();
-            var token = _cancellationRefreshCommits.Token;
-
-            Task.Run(async () =>
+        private async Task RefreshCommitsAsync(Models.RefreshCoordinator.Context context)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                await Dispatcher.UIThread.InvokeAsync(() => _histories.IsLoading = true);
+                if (context.IsCurrent)
+                    _histories.IsLoading = true;
+            });
 
+            try
+            {
                 var builder = new StringBuilder();
                 builder
                     .Append('-')
@@ -1263,6 +1260,7 @@ namespace SourceGit.ViewModels
                 if (_uiStates.FocusOnCurrentBranch)
                 {
                     var upstream = await new Commands.QueryUpstreamOfCurrentBranch(FullPath)
+                        .WithCancellation(context.CancellationToken)
                         .GetResultAsync()
                         .ConfigureAwait(false);
                     builder.Append(_uiStates.BuildHistoryParams_FocusOnCurrentBranchMode(upstream));
@@ -1273,6 +1271,7 @@ namespace SourceGit.ViewModels
                 }
 
                 var commits = await new Commands.QueryCommits(FullPath, builder.ToString())
+                    .WithCancellation(context.CancellationToken)
                     .GetResultAsync()
                     .ConfigureAwait(false);
 
@@ -1291,12 +1290,11 @@ namespace SourceGit.ViewModels
 
                 Dispatcher.UIThread.Invoke(() =>
                 {
-                    if (token.IsCancellationRequested)
+                    if (!context.IsCurrent)
                         return;
 
                     if (_histories != null)
                     {
-                        _histories.IsLoading = false;
                         _histories.Commits = commits;
                         BisectState = _histories.UpdateBisectInfo();
 
@@ -1306,10 +1304,23 @@ namespace SourceGit.ViewModels
 
                     _navigateToCommitDelayed = string.Empty;
                 });
-            }, token);
+            }
+            finally
+            {
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (context.IsCurrent)
+                        _histories.IsLoading = false;
+                });
+            }
         }
 
         public void RefreshSubmodules()
+        {
+            _refreshes?.Request(Models.RefreshKind.Submodules, RefreshSubmodulesAsync);
+        }
+
+        private async Task RefreshSubmodulesAsync(Models.RefreshCoordinator.Context context)
         {
             if (!MayHaveSubmodules())
             {
@@ -1317,6 +1328,9 @@ namespace SourceGit.ViewModels
                 {
                     Dispatcher.UIThread.Invoke(() =>
                     {
+                        if (!context.IsCurrent)
+                            return;
+
                         Submodules = [];
                         VisibleSubmodules = BuildVisibleSubmodules();
                     });
@@ -1325,105 +1339,98 @@ namespace SourceGit.ViewModels
                 return;
             }
 
-            Task.Run(async () =>
+            var submodules = await new Commands.QuerySubmodules(FullPath).WithCancellation(context.CancellationToken).GetResultAsync().ConfigureAwait(false);
+
+            Dispatcher.UIThread.Invoke(() =>
             {
-                var submodules = await new Commands.QuerySubmodules(FullPath).GetResultAsync().ConfigureAwait(false);
+                if (!context.IsCurrent)
+                    return;
 
-                Dispatcher.UIThread.Invoke(() =>
+                bool hasChanged = _submodules.Count != submodules.Count;
+                if (!hasChanged)
                 {
-                    bool hasChanged = _submodules.Count != submodules.Count;
-                    if (!hasChanged)
-                    {
-                        var old = new Dictionary<string, Models.Submodule>();
-                        foreach (var module in _submodules)
-                            old.Add(module.Path, module);
+                    var old = new Dictionary<string, Models.Submodule>();
+                    foreach (var module in _submodules)
+                        old.Add(module.Path, module);
 
-                        foreach (var module in submodules)
+                    foreach (var module in submodules)
+                    {
+                        if (!old.TryGetValue(module.Path, out var exist))
                         {
-                            if (!old.TryGetValue(module.Path, out var exist))
-                            {
-                                hasChanged = true;
-                                break;
-                            }
-
-                            hasChanged = !exist.SHA.Equals(module.SHA, StringComparison.Ordinal) ||
-                                         !exist.Branch.Equals(module.Branch, StringComparison.Ordinal) ||
-                                         !exist.URL.Equals(module.URL, StringComparison.Ordinal) ||
-                                         exist.Status != module.Status;
-
-                            if (hasChanged)
-                                break;
+                            hasChanged = true;
+                            break;
                         }
-                    }
 
-                    if (hasChanged)
-                    {
-                        Submodules = submodules;
-                        VisibleSubmodules = BuildVisibleSubmodules();
+                        hasChanged = !exist.SHA.Equals(module.SHA, StringComparison.Ordinal) ||
+                                     !exist.Branch.Equals(module.Branch, StringComparison.Ordinal) ||
+                                     !exist.URL.Equals(module.URL, StringComparison.Ordinal) ||
+                                     exist.Status != module.Status;
+
+                        if (hasChanged)
+                            break;
                     }
-                });
+                }
+
+                if (hasChanged)
+                {
+                    Submodules = submodules;
+                    VisibleSubmodules = BuildVisibleSubmodules();
+                }
             });
         }
 
         public void RefreshWorkingCopyChanges()
         {
-            if (IsBare)
-                return;
-
-            if (_cancellationRefreshWorkingCopyChanges is { IsCancellationRequested: false })
-                _cancellationRefreshWorkingCopyChanges.Cancel();
-
-            _cancellationRefreshWorkingCopyChanges = new CancellationTokenSource();
-            var token = _cancellationRefreshWorkingCopyChanges.Token;
-            var noOptionalLocks = Interlocked.Add(ref _queryLocalChangesTimes, 1) > 1;
-
-            Task.Run(async () =>
-            {
-                var changes = await new Commands.QueryLocalChanges(FullPath, _uiStates.IncludeUntrackedInLocalChanges, noOptionalLocks)
-                    .WithCancellation(token)
-                    .GetResultAsync()
-                    .ConfigureAwait(false);
-
-                changes.Sort((l, r) => Models.NumericSort.Compare(l.Path, r.Path));
-
-                Dispatcher.UIThread.Invoke(() =>
-                {
-                    if (token.IsCancellationRequested)
-                        return;
-
-                    _workingCopy.SetData(changes);
-                    LocalChangesCount = changes.Count;
-                    OnPropertyChanged(nameof(InProgressContext));
-                    GetOwnerPage()?.ChangeDirtyState(Models.DirtyState.HasLocalChanges, changes.Count == 0);
-                });
-            }, token);
+            _refreshes?.Request(Models.RefreshKind.WorkingCopy, RefreshWorkingCopyChangesAsync);
         }
 
-        public void RefreshStashes()
+        private async Task RefreshWorkingCopyChangesAsync(Models.RefreshCoordinator.Context context)
         {
             if (IsBare)
                 return;
 
-            if (_cancellationRefreshStashes is { IsCancellationRequested: false })
-                _cancellationRefreshStashes.Cancel();
+            var noOptionalLocks = Interlocked.Add(ref _queryLocalChangesTimes, 1) > 1;
 
-            _cancellationRefreshStashes = new CancellationTokenSource();
-            var token = _cancellationRefreshStashes.Token;
+            var changes = await new Commands.QueryLocalChanges(FullPath, _uiStates.IncludeUntrackedInLocalChanges, noOptionalLocks)
+                .WithCancellation(context.CancellationToken)
+                .GetResultAsync()
+                .ConfigureAwait(false);
 
-            Task.Run(async () =>
+            changes.Sort((l, r) => Models.NumericSort.Compare(l.Path, r.Path));
+
+            Dispatcher.UIThread.Invoke(() =>
             {
-                var stashes = await new Commands.QueryStashes(FullPath).GetResultAsync().ConfigureAwait(false);
-                Dispatcher.UIThread.Invoke(() =>
-                {
-                    if (token.IsCancellationRequested)
-                        return;
+                if (!context.IsCurrent)
+                    return;
 
-                    if (_stashesPage != null)
-                        _stashesPage.Stashes = stashes;
+                _workingCopy.SetData(changes);
+                LocalChangesCount = changes.Count;
+                OnPropertyChanged(nameof(InProgressContext));
+                GetOwnerPage()?.ChangeDirtyState(Models.DirtyState.HasLocalChanges, changes.Count == 0);
+            });
+        }
 
-                    StashesCount = stashes.Count;
-                });
-            }, token);
+        public void RefreshStashes()
+        {
+            _refreshes?.Request(Models.RefreshKind.Stashes, RefreshStashesAsync);
+        }
+
+        private async Task RefreshStashesAsync(Models.RefreshCoordinator.Context context)
+        {
+            if (IsBare)
+                return;
+
+            var stashes = await new Commands.QueryStashes(FullPath).WithCancellation(context.CancellationToken).GetResultAsync().ConfigureAwait(false);
+            Dispatcher.UIThread.Invoke(() =>
+            {
+                if (!context.IsCurrent)
+                    return;
+
+                if (_stashesPage != null)
+                    _stashesPage.Stashes = stashes;
+
+                StashesCount = stashes.Count;
+            });
         }
 
         public void CreateNewBranch()
@@ -1993,6 +2000,7 @@ namespace SourceGit.ViewModels
         private bool _hasAllowedSignersFile = false;
         private ulong _queryLocalChangesTimes = 0;
 
+        private Models.RefreshCoordinator _refreshes = null;
         private Models.Watcher _watcher = null;
         private Histories _histories = null;
         private WorkingCopy _workingCopy = null;
@@ -2022,11 +2030,5 @@ namespace SourceGit.ViewModels
 
         private Models.BisectState _bisectState = Models.BisectState.None;
         private bool _isBisectCommandRunning = false;
-
-        private CancellationTokenSource _cancellationRefreshBranches = null;
-        private CancellationTokenSource _cancellationRefreshTags = null;
-        private CancellationTokenSource _cancellationRefreshWorkingCopyChanges = null;
-        private CancellationTokenSource _cancellationRefreshCommits = null;
-        private CancellationTokenSource _cancellationRefreshStashes = null;
     }
 }
