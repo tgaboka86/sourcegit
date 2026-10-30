@@ -318,6 +318,8 @@ namespace SourceGit.Models
                 Interlocked.Exchange(ref _updateStashes, RecordChange());
             }
             else if (name.Equals("HEAD", StringComparison.Ordinal) ||
+                name.Equals("config", StringComparison.Ordinal) ||
+                name.Equals("config.worktree", StringComparison.Ordinal) ||
                 name.Equals("BISECT_START", StringComparison.Ordinal) ||
                 name.StartsWith("refs/heads/", StringComparison.Ordinal) ||
                 name.StartsWith("refs/remotes/", StringComparison.Ordinal) ||

@@ -9,7 +9,7 @@ namespace SourceGit.Views
     {
         public static MenuItem Create(Control owner, ViewModels.Repository repo, Models.Branch branch)
         {
-            if (branch == null || branch.IsDetachedHead)
+            if (branch == null || branch.IsDetachedHead || !branch.IsHeadAuthoredByUser)
                 return null;
 
             Models.Branch local = branch.IsLocal ? branch : null;

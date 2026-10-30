@@ -2,6 +2,8 @@
 
 SourceGit can create pull requests directly in Azure DevOps Services. Right-click a published local or remote branch in the sidebar and choose **Create Pull Request**. In the history graph, the action is available inside the branch-name submenu. Other hosting providers retain their existing browser workflow.
 
+The Create PR action is shown only when the selected branch's tip commit was authored using the effective Git `user.email` configured for this repository. Email matching ignores case and surrounding whitespace; display names and committer identities are not used. The repository's local Git identity takes precedence over global configuration. Unknown authorship or an empty Git email hides the action. This rule applies to both sidebar/history menus and the existing browser-based provider actions. It checks the selected tip, not every earlier commit on the branch. Authorship is loaded during the normal background branch refresh, so opening a context menu does not launch additional Git commands. Local repository configuration changes trigger a refresh; refresh the repository after changing global identity settings outside SourceGit.
+
 A local branch does not need an upstream setting when exactly one supported remote branch has the same name and commit. When several remotes match, choose the intended branch under **Remotes** explicitly. SourceGit never changes tracking settings to create a PR.
 
 Push the source branch through the ordinary Git workflow first. SourceGit checks the server ref before creation and verifies a corresponding local branch against it. The dialog does not push, commit, rebase, or configure tracking. Uncommitted changes are not included.

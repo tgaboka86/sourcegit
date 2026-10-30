@@ -54,6 +54,7 @@ internal static class Program
             git.ArgumentList.Add("main");
             using (var process = Process.Start(git)) process.WaitForExit();
             CheckBranchMenus(fixture);
+            CheckCommitAuthorship(fixture);
             CheckSignInFailure(fixture);
             CheckDialog(fixture, args.Contains("--render"));
             CheckTokenDialog(fixture, args.Contains("--render"));
@@ -94,8 +95,8 @@ internal static class Program
         var configPath = Path.Combine(fixture, ".git", "config");
         var originalConfig = File.ReadAllText(configPath);
         var repo = new Repository(false, fixture, Path.Combine(fixture, ".git"));
-        var local = new SourceGit.Models.Branch { IsLocal = true, IsCurrent = true, Name = "feature/widgets", FullName = Source, Head = new('a', 40) };
-        var published = new SourceGit.Models.Branch { Name = local.Name, FullName = "refs/remotes/origin/feature/widgets", Remote = "origin", Head = local.Head };
+        var local = new SourceGit.Models.Branch { IsLocal = true, IsCurrent = true, Name = "feature/widgets", FullName = Source, Head = new('a', 40), IsHeadAuthoredByUser = true };
+        var published = new SourceGit.Models.Branch { Name = local.Name, FullName = "refs/remotes/origin/feature/widgets", Remote = "origin", Head = local.Head, IsHeadAuthoredByUser = true };
         var remote = new SourceGit.Models.Remote { Name = "origin", URL = Address.WebUrl };
         repo.Branches.AddRange([local, published]);
         repo.Remotes.Add(remote);
@@ -130,6 +131,20 @@ internal static class Program
             Check(FindItem(menu.Items) is { IsEnabled: true }, "history branch submenu exposes Create PR: " + method);
         }
 
+        local.IsHeadAuthoredByUser = published.IsHeadAuthoredByUser = false;
+        Check(Item(local) == null && Item(published) == null, "PR action is absent for a tip authored by someone else or with unknown authorship");
+        localMenu = (ContextMenu)localMenuMethod.Invoke(tree, [repo, local]);
+        Check(!localMenu.Items.OfType<MenuItem>().Any(x => x.Header?.ToString()?.StartsWith("Create PR", StringComparison.Ordinal) == true), "local branch menu cannot bypass authorship through the browser fallback");
+        Check(!tree.CreateContextMenuForRemoteBranch(repo, published).Items.OfType<MenuItem>().Any(x => x.Header?.ToString()?.StartsWith("Create PR", StringComparison.Ordinal) == true), "remote branch menu cannot bypass authorship through the browser fallback");
+        foreach (var method in new[] { "FillCurrentBranchMenu", "FillOtherLocalBranchMenu", "FillRemoteBranchMenu" })
+        {
+            var menu = new ContextMenu();
+            object[] arguments = method == "FillCurrentBranchMenu" ? [menu, repo, local] : [menu, repo, method == "FillRemoteBranchMenu" ? published : local, local, false];
+            typeof(SourceGit.Views.Histories).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(history, arguments);
+            Check(FindItem(menu.Items) == null, "history hides PR for another author: " + method);
+        }
+        local.IsHeadAuthoredByUser = published.IsHeadAuthoredByUser = true;
+
         local.Head = new('b', 40);
         Check(Item(local) is { IsEnabled: false }, "local commits not yet published keep Create PR disabled");
         Check(Item(published) is { IsEnabled: false }, "remote context also checks an untracked local counterpart");
@@ -139,7 +154,7 @@ internal static class Program
         published.Name = local.Name;
 
         var secondRemote = new SourceGit.Models.Remote { Name = "mirror", URL = "https://dev.azure.com/another-org/sample-project/_git/sample-repo" };
-        var secondBranch = new SourceGit.Models.Branch { Name = local.Name, FullName = "refs/remotes/mirror/feature/widgets", Remote = "mirror", Head = local.Head };
+        var secondBranch = new SourceGit.Models.Branch { Name = local.Name, FullName = "refs/remotes/mirror/feature/widgets", Remote = "mirror", Head = local.Head, IsHeadAuthoredByUser = true };
         repo.Remotes.Add(secondRemote);
         repo.Branches.Add(secondBranch);
         Check(Item(local) is { IsEnabled: false } ambiguous && Equals(ambiguous.Header, App.Text("CreatePR.SelectPublishedBranch")), "multiple matching remotes require explicit choice");
@@ -151,7 +166,67 @@ internal static class Program
         local.IsDetachedHead = false;
         remote.URL = "https://github.com/example/sample-repo.git";
         Check(Item(local) == null, "non-Azure upstream keeps its existing provider menu");
+        Check(tree.CreateContextMenuForRemoteBranch(repo, published).Items.OfType<MenuItem>().Any(x => Equals(x.Header, App.Text("BranchCM.CreatePR"))), "own commit keeps the existing provider's browser PR action");
+        published.IsHeadAuthoredByUser = false;
+        Check(!tree.CreateContextMenuForRemoteBranch(repo, published).Items.OfType<MenuItem>().Any(x => Equals(x.Header, App.Text("BranchCM.CreatePR"))), "other hosting providers also hide PR actions for another author");
         Check(File.ReadAllText(configPath) == originalConfig, "resolving menus does not change Git tracking configuration");
+    }
+
+    private static void CheckCommitAuthorship(string fixture)
+    {
+        var directory = Path.Combine(fixture, "commit-authorship");
+        Directory.CreateDirectory(directory);
+        string Git(params string[] arguments)
+        {
+            var info = new ProcessStartInfo("git") { WorkingDirectory = directory, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+            foreach (var argument in arguments) info.ArgumentList.Add(argument);
+            using var process = Process.Start(info);
+            var output = process.StandardOutput.ReadToEnd();
+            var error = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            if (process.ExitCode != 0) throw new Exception("Authorship fixture command failed: " + error);
+            return output.Trim();
+        }
+        List<SourceGit.Models.Branch> ReadBranches()
+        {
+            var read = new SourceGit.Commands.QueryBranches(directory).GetResultAsync();
+            PumpUntil(() => read.IsCompleted);
+            return read.GetAwaiter().GetResult();
+        }
+        Git("init", "-b", "main");
+        Git("config", "user.name", "Same Display Name");
+        Git("config", "user.email", "owner@example.invalid");
+        Git("config", "commit.gpgsign", "false");
+        Git("config", "core.hooksPath", "unused-hooks");
+        Git("commit", "--allow-empty", "--author=Same Display Name <owner@example.invalid>", "-m", "Own change");
+        var own = Git("rev-parse", "HEAD");
+        Git("branch", "owned");
+        Git("commit", "--allow-empty", "--author=Same Display Name <other@example.invalid>", "-m", "Someone else's change");
+        var other = Git("rev-parse", "HEAD");
+        Git("branch", "other-author");
+        Git("-c", "user.email=committer@example.invalid", "commit", "--allow-empty", "--author=Same Display Name <owner@example.invalid>", "-m", "Own change committed elsewhere");
+        Git("branch", "other-committer");
+        Git("update-ref", "refs/remotes/origin/owned", own);
+        Git("update-ref", "refs/remotes/origin/other-author", other);
+        Git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/owned");
+        var configBefore = File.ReadAllText(Path.Combine(directory, ".git", "config"));
+        var branches = ReadBranches();
+        Check(branches.Single(x => x.FullName == "refs/heads/owned").IsHeadAuthoredByUser, "repository Git email identifies own authored tip");
+        Check(!branches.Single(x => x.FullName == "refs/heads/other-author").IsHeadAuthoredByUser, "same display name and own committer do not make someone else's commit eligible");
+        Check(branches.Single(x => x.FullName == "refs/heads/other-committer").IsHeadAuthoredByUser, "own author remains eligible when someone else committed the change");
+        Check(branches.Single(x => x.FullName == "refs/remotes/origin/owned").IsHeadAuthoredByUser && !branches.Single(x => x.FullName == "refs/remotes/origin/other-author").IsHeadAuthoredByUser, "remote branch tips use the same authorship rule");
+        Check(!branches.Any(x => x.FullName.EndsWith("/HEAD", StringComparison.Ordinal)), "symbolic remote HEAD remains excluded");
+        Check(File.ReadAllText(Path.Combine(directory, ".git", "config")) == configBefore, "authorship lookup does not modify Git identity or configuration");
+        Git("config", "user.email", "OWNER@EXAMPLE.INVALID");
+        Check(ReadBranches().Single(x => x.Name == "owned" && x.IsLocal).IsHeadAuthoredByUser, "author email matching is case-insensitive");
+        Git("config", "user.email", "other@example.invalid");
+        branches = ReadBranches();
+        Check(!branches.Single(x => x.Name == "owned" && x.IsLocal).IsHeadAuthoredByUser && branches.Single(x => x.Name == "other-author" && x.IsLocal).IsHeadAuthoredByUser, "refresh picks up changed repository identity");
+        Git("config", "user.email", "");
+        Check(ReadBranches().All(x => !x.IsHeadAuthoredByUser), "empty configured identity never makes a commit eligible");
+        Git("config", "user.email", "owner@example.invalid");
+        Git("checkout", "--detach", own);
+        Check(ReadBranches().Any(x => x.IsDetachedHead), "additional author field preserves detached-HEAD branch parsing");
     }
 
     private static CreateRequest Request(bool draft = false) => new()

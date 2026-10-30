@@ -2,6 +2,8 @@
 
 These executable regression checks cover remote parsing, published-source validation, sidebar and history menus (including published branches without an upstream and ambiguous remotes), request payloads, required and optional reviewers, draft/manual/automatic completion, duplicate detection, partial and uncertain creation outcomes, recovery persistence, account-scoped defaults, and native dialog behavior.
 
+Authorship checks use real temporary Git commits with different author/committer emails and identical display names. They cover local and remote tips, case-insensitive email matching, changed/empty repository identities, preserved detached-HEAD parsing, and hiding both native and browser PR menu actions for other authors.
+
 The HTTP handler and authentication provider are synthetic. The checks use a temporary local Git repository and temporary preferences, and make no live Azure DevOps requests. No user account or application registration is required.
 
 Sign-in regression cases distinguish successful Microsoft authentication from a denied repository request, verify tenant-mismatch explanations and API redirect suppression, and ensure retrying repository loading does not start another interactive sign-in or perform any writes.

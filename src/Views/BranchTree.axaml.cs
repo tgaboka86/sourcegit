@@ -1052,7 +1052,7 @@ namespace SourceGit.Views
             {
                 menu.Items.Add(azureCreatePR);
             }
-            else if (upstream != null)
+            else if (branch.IsHeadAuthoredByUser && upstream != null)
             {
                 var remote = repo.Remotes.Find(x => x.Name.Equals(upstream.Remote, StringComparison.Ordinal));
                 if (remote != null && remote.TryGetCreatePullRequestURL(out var prURL, upstream.Name))
@@ -1384,7 +1384,7 @@ namespace SourceGit.Views
             {
                 menu.Items.Add(azureCreatePR);
             }
-            else if (remote != null && remote.TryGetCreatePullRequestURL(out var prURL, branch.Name))
+            else if (branch.IsHeadAuthoredByUser && remote != null && remote.TryGetCreatePullRequestURL(out var prURL, branch.Name))
             {
                 var createPR = new MenuItem();
                 createPR.Header = App.Text("BranchCM.CreatePR");
