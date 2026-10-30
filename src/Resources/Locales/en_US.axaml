@@ -6,7 +6,7 @@
   <x:String x:Key="Text.CreatePR.PersonalAccessToken">Personal access token (PAT)</x:String>
   <x:String x:Key="Text.CreatePR.ConnectToken">Connect with token</x:String>
   <x:String x:Key="Text.CreatePR.ConnectingToken">Connecting with your personal access token…</x:String>
-  <x:String x:Key="Text.CreatePR.TokenHelp">Use a token for this organization with Code (Read &amp; write) and Identity (Read) scopes. No application ID or tenant ID is needed.</x:String>
+  <x:String x:Key="Text.CreatePR.TokenHelp">Use a token for this organization with Code (Read &amp; write), Identity (Read), and Graph (Read) scopes. No application ID or tenant ID is needed.</x:String>
   <x:String x:Key="Text.CreatePR.TokenHint">Paste a PAT, or leave empty to reuse the saved token</x:String>
   <x:String x:Key="Text.CreatePR.TokenStorage">After connecting, the token is stored in your system credential store for this organization. Sign out removes the saved token from this computer.</x:String>
   <x:String x:Key="Text.CreatePR.TokenRepositoryLoadFailed">The token was authenticated, but Azure DevOps repository data could not be loaded.</x:String>
@@ -26,7 +26,11 @@
   <x:String x:Key="Text.CreatePR.Subject">Title</x:String>
   <x:String x:Key="Text.CreatePR.Description">Description</x:String>
   <x:String x:Key="Text.CreatePR.Reviewers">Reviewers</x:String>
-  <x:String x:Key="Text.CreatePR.SearchReviewers">Search users or groups by name or email</x:String>
+  <x:String x:Key="Text.CreatePR.SearchReviewers">Type at least 2 characters of a name or email</x:String>
+  <x:String x:Key="Text.CreatePR.SearchingReviewers">Searching users and groups…</x:String>
+  <x:String x:Key="Text.CreatePR.NoReviewersFound">No matching users or groups to add.</x:String>
+  <x:String x:Key="Text.CreatePR.Error.ReviewerSearchPermission">Reviewer search needs Graph (Read) and Identity (Read) permissions. Check your token scopes and organization access.</x:String>
+  <x:String x:Key="Text.CreatePR.Error.SelectionsNotSaved">Could not remember the selected target or reviewers. Check that the repository settings are writable.</x:String>
   <x:String x:Key="Text.CreatePR.AddReviewer">Add</x:String>
   <x:String x:Key="Text.CreatePR.Required">Required</x:String>
   <x:String x:Key="Text.CreatePR.Remove">Remove</x:String>

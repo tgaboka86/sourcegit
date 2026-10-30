@@ -14,11 +14,13 @@ namespace SourceGit.ViewModels
 {
     public sealed class PullRequestReviewer : ObservableObject
     {
+        public PullRequestReviewer(Action changed = null) { _changed = changed; }
         public string Id { get; init; }
         public string Name { get; init; }
         public string Detail { get; init; }
         public bool IsAvailable { get; init; } = true;
-        public bool IsRequired { get => _required; set => SetProperty(ref _required, value); }
+        public bool IsRequired { get => _required; set { if (SetProperty(ref _required, value)) _changed?.Invoke(); } }
+        private readonly Action _changed;
         private bool _required;
     }
 
@@ -27,6 +29,8 @@ namespace SourceGit.ViewModels
         public ObservableCollection<GitRef> Branches { get; } = [];
         public ObservableCollection<Identity> SearchResults { get; } = [];
         public ObservableCollection<PullRequestReviewer> Reviewers { get; } = [];
+        public string ReviewerSearchStatus { get => _reviewerSearchStatus; private set => SetProperty(ref _reviewerSearchStatus, value); }
+        public bool IsSearchingReviewers { get => _searchingReviewers; private set => SetProperty(ref _searchingReviewers, value); }
         public string SourceBranch { get; }
         public string RepositoryLabel { get => _repositoryLabel; private set => SetProperty(ref _repositoryLabel, value); }
         public string ClientId { get => _clientId; set => SetProperty(ref _clientId, value); }
@@ -93,11 +97,14 @@ namespace SourceGit.ViewModels
             set
             {
                 if (SetProperty(ref _target, value))
+                {
                     _ = LoadCommitTextAsync();
+                    if (CanEdit && value != null && Branches.Contains(value))
+                        RememberTarget(value.Name);
+                }
                 NotifyState();
             }
         }
-        public Identity SelectedSearchResult { get => _selectedSearchResult; set => SetProperty(ref _selectedSearchResult, value); }
         public string Title
         {
             get => _title;
@@ -126,7 +133,8 @@ namespace SourceGit.ViewModels
 
         public CreatePullRequest(Repository repository, Models.Remote remote, Models.Branch branch, Models.Branch localBranch = null,
             HttpClient http = null, Func<ConnectionSettings, string, Task<IAuthentication>> authenticationFactory = null,
-            Func<string, string, Task<PersonalAccessTokenAuthentication>> personalAccessTokenFactory = null)
+            Func<string, string, Task<PersonalAccessTokenAuthentication>> personalAccessTokenFactory = null,
+            Func<CancellationToken, Task<Commands.PullRequestBranchOrigin>> branchOriginReader = null)
         {
             _repo = repository;
             _remote = remote;
@@ -145,6 +153,9 @@ namespace SourceGit.ViewModels
             _http = http ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(30) };
             _authenticationFactory = authenticationFactory ?? (async (settings, directory) => await Authentication.CreateAsync(settings, directory));
             _personalAccessTokenFactory = personalAccessTokenFactory ?? ((organization, token) => PersonalAccessTokenAuthentication.CreateAsync(organization, token, Native.OS.Keychain));
+            _branchOriginReader = branchOriginReader ?? (token => _localBranch == null
+                ? Task.FromResult<Commands.PullRequestBranchOrigin>(null)
+                : new Commands.ReadPullRequestBranchOrigin(_repo.FullPath, _localBranch.FullName).GetOriginAsync(token));
             Status = App.Text("CreatePR.ConnectPrompt");
         }
 
@@ -159,9 +170,13 @@ namespace SourceGit.ViewModels
             _result = null;
             IsFinished = false;
             _store = null;
+            _preferenceKey = null;
+            _recentTargetRefs.Clear();
             Reviewers.Clear();
             Branches.Clear();
             SearchResults.Clear();
+            ReviewerSearchStatus = string.Empty;
+            IsSearchingReviewers = false;
             _searchCancellation?.Cancel();
             _commitCancellation?.Cancel();
             Target = null;
@@ -221,8 +236,11 @@ namespace SourceGit.ViewModels
                 Branches.Add(branch);
 
             var defaults = _repo.Settings.AzureDevOpsPullRequests.GetValueOrDefault(_preferenceKey) ?? new PullRequestDefaults();
+            _recentTargetRefs = RecentTargets(defaults, null);
+            SortBranches();
             var pending = _store.Pending;
-            Target = Branches.FirstOrDefault(x => x.Name == (pending?.TargetRef ?? defaults.TargetRef));
+            var inferredTarget = pending == null ? await FindOriginTargetAsync() : null;
+            Target = Branches.FirstOrDefault(x => x.Name == (pending?.TargetRef ?? inferredTarget ?? defaults.TargetRef));
             AutoComplete = pending is { IsDraft: false } ? pending.AutoComplete : defaults.AutoComplete;
             DeleteSourceBranch = pending?.Completion.DeleteSourceBranch ?? defaults.DeleteSourceBranch;
             MergeStrategy = Array.IndexOf(StrategyValues, pending?.Completion.MergeStrategy ?? defaults.MergeStrategy);
@@ -234,7 +252,7 @@ namespace SourceGit.ViewModels
             foreach (var saved in selectedReviewers)
             {
                 var identity = restored.FirstOrDefault(x => x.Id.Equals(saved.Id, StringComparison.OrdinalIgnoreCase));
-                Reviewers.Add(new PullRequestReviewer { Id = saved.Id, Name = identity?.Label ?? App.Text("CreatePR.UnavailableReviewer"), Detail = identity?.Detail, IsAvailable = identity != null, IsRequired = saved.IsRequired });
+                Reviewers.Add(new PullRequestReviewer(RememberReviewers) { Id = saved.Id, Name = identity?.Label ?? App.Text("CreatePR.UnavailableReviewer"), Detail = identity?.Detail, IsAvailable = identity != null, IsRequired = saved.IsRequired });
             }
             IsConnected = true;
             ConnectionExpanded = false;
@@ -261,6 +279,92 @@ namespace SourceGit.ViewModels
             AccountName = _auth.UserName;
             SessionOnly = _auth.SessionOnly;
             ConnectionExpanded = false;
+        }
+
+        private async Task<string> FindOriginTargetAsync()
+        {
+            var origin = await _branchOriginReader(_lifetime.Token);
+            if (origin == null)
+                return null;
+            var start = origin.StartPoint;
+            if (start != "HEAD" && !(start is { Length: 40 } && start.All(Uri.IsHexDigit)))
+            {
+                var names = new List<string> { start };
+                foreach (var prefix in new[] { "refs/heads/", "refs/remotes/" + _remote.Name + "/", _remote.Name + "/" })
+                {
+                    if (start.StartsWith(prefix, StringComparison.Ordinal))
+                        names.Add(start[prefix.Length..]);
+                }
+                var named = Branches.Where(x => names.Contains(x.BranchName, StringComparer.Ordinal)).ToList();
+                return named.Count == 1 ? named[0].Name : null;
+            }
+            // Branches created from a commit/HEAD have no parent name. Infer only an exact, unique remote tip.
+            var matching = Branches.Where(x => string.Equals(x.ObjectId, origin.CommitId, StringComparison.OrdinalIgnoreCase)).ToList();
+            return matching.Count == 1 ? matching[0].Name : null;
+        }
+
+        private static List<string> RecentTargets(PullRequestDefaults defaults, string latest) =>
+            new[] { latest }.Concat(defaults.RecentTargetRefs ?? []).Append(defaults.TargetRef)
+                .Where(x => !string.IsNullOrEmpty(x)).Distinct(StringComparer.Ordinal).Take(3).ToList();
+
+        private void SortBranches()
+        {
+            var ordered = _recentTargetRefs.Select(name => Branches.FirstOrDefault(x => x.Name == name)).Where(x => x != null)
+                .Concat(Branches.Where(x => !_recentTargetRefs.Contains(x.Name)).OrderBy(x => x.BranchName, StringComparer.Ordinal)).ToList();
+            for (var i = 0; i < ordered.Count; i++)
+            {
+                var current = Branches.IndexOf(ordered[i]);
+                if (current != i)
+                    Branches.Move(current, i);
+            }
+        }
+
+        public void RefreshTargetOrder() => SortBranches();
+
+        private PullRequestDefaults CopyDefaults()
+        {
+            var saved = _repo.Settings.AzureDevOpsPullRequests.GetValueOrDefault(_preferenceKey) ?? new PullRequestDefaults();
+            return new()
+            {
+                TargetRef = saved.TargetRef,
+                RecentTargetRefs = [.. saved.RecentTargetRefs ?? []],
+                Reviewers = saved.Reviewers.Select(x => new ReviewerSelection { Id = x.Id, IsRequired = x.IsRequired }).ToList(),
+                AutoComplete = saved.AutoComplete,
+                MergeStrategy = saved.MergeStrategy,
+                DeleteSourceBranch = saved.DeleteSourceBranch,
+            };
+        }
+
+        private void SaveDefaults(PullRequestDefaults defaults, string errorCode)
+        {
+            var previous = _repo.Settings.AzureDevOpsPullRequests.GetValueOrDefault(_preferenceKey);
+            _repo.Settings.AzureDevOpsPullRequests[_preferenceKey] = defaults;
+            if (!_repo.Settings.TrySave())
+            {
+                if (previous == null)
+                    _repo.Settings.AzureDevOpsPullRequests.Remove(_preferenceKey);
+                else
+                    _repo.Settings.AzureDevOpsPullRequests[_preferenceKey] = previous;
+                Error = App.Text("CreatePR.Error." + errorCode);
+            }
+        }
+
+        private void RememberTarget(string name)
+        {
+            var defaults = CopyDefaults();
+            defaults.RecentTargetRefs = RecentTargets(defaults, name);
+            defaults.TargetRef = name;
+            SaveDefaults(defaults, "SelectionsNotSaved");
+            _recentTargetRefs = defaults.RecentTargetRefs;
+        }
+
+        private void RememberReviewers()
+        {
+            if (!CanEdit || _preferenceKey == null)
+                return;
+            var defaults = CopyDefaults();
+            defaults.Reviewers = Reviewers.Select(x => new ReviewerSelection { Id = x.Id, IsRequired = x.IsRequired }).ToList();
+            SaveDefaults(defaults, "SelectionsNotSaved");
         }
 
         public Task RetryLoadingAsync() => IsConnected ? RunAsync(LoadCommitTextAsync) : ConnectAsync(false);
@@ -356,13 +460,12 @@ namespace SourceGit.ViewModels
             Status = App.Text("CreatePR.ConnectPrompt");
         });
 
-        public void AddReviewer()
+        public void AddReviewer(Identity identity)
         {
-            var identity = SelectedSearchResult;
-            if (!CanEdit || identity == null || Reviewers.Any(x => x.Id.Equals(identity.Id, StringComparison.OrdinalIgnoreCase)))
+            if (!CanEdit || identity == null || !identity.IsActive || !Guid.TryParse(identity.Id, out _) || Reviewers.Any(x => x.Id.Equals(identity.Id, StringComparison.OrdinalIgnoreCase)))
                 return;
-            Reviewers.Add(new PullRequestReviewer { Id = identity.Id, Name = identity.Label, Detail = identity.Detail });
-            SelectedSearchResult = null;
+            Reviewers.Add(new PullRequestReviewer(RememberReviewers) { Id = identity.Id, Name = identity.Label, Detail = identity.Detail });
+            RememberReviewers();
             SearchText = string.Empty;
             NotifyState();
         }
@@ -370,7 +473,10 @@ namespace SourceGit.ViewModels
         public void RemoveReviewer(PullRequestReviewer reviewer)
         {
             if (CanEdit)
+            {
                 Reviewers.Remove(reviewer);
+                RememberReviewers();
+            }
             NotifyState();
         }
 
@@ -413,16 +519,15 @@ namespace SourceGit.ViewModels
         private void Remember(PullRequest pr)
         {
             var previous = _repo.Settings.AzureDevOpsPullRequests.GetValueOrDefault(_preferenceKey);
-            _repo.Settings.AzureDevOpsPullRequests[_preferenceKey] = new PullRequestDefaults
+            SaveDefaults(new PullRequestDefaults
             {
                 TargetRef = pr.TargetRefName,
+                RecentTargetRefs = RecentTargets(previous ?? new PullRequestDefaults(), pr.TargetRefName),
                 Reviewers = pr.Reviewers.Where(x => Reviewers.Any(y => string.Equals(x.Id, y.Id, StringComparison.OrdinalIgnoreCase))).Select(x => new ReviewerSelection { Id = x.Id, IsRequired = x.IsRequired }).ToList(),
                 AutoComplete = pr.IsDraft ? previous?.AutoComplete ?? true : pr.AutoCompleteSetBy != null || (pr.Status == "completed" && AutoComplete),
                 MergeStrategy = pr.CompletionOptions.MergeStrategy,
                 DeleteSourceBranch = pr.CompletionOptions.DeleteSourceBranch,
-            };
-            if (!_repo.Settings.TrySave())
-                Error = App.Text("CreatePR.Error.PreferencesNotSaved");
+            }, "PreferencesNotSaved");
         }
 
         public void OpenResult()
@@ -456,22 +561,41 @@ namespace SourceGit.ViewModels
         private async Task SearchAsync(string text)
         {
             _searchCancellation?.Cancel();
-            _searchCancellation?.Dispose();
-            var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
-            _searchCancellation = cancellation;
+            _searchCancellation = null;
+            IsSearchingReviewers = false;
+            ReviewerSearchStatus = string.Empty;
             SearchResults.Clear();
-            if (!CanEdit || string.IsNullOrWhiteSpace(text) || text.Trim().Length < 2)
+            if (_disposed || !CanEdit || string.IsNullOrWhiteSpace(text) || text.Trim().Length < 2)
                 return;
+            using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+            _searchCancellation = cancellation;
+            IsSearchingReviewers = true;
+            ReviewerSearchStatus = App.Text("CreatePR.SearchingReviewers");
             try
             {
-                await Task.Delay(350, cancellation.Token);
+                await Task.Delay(250, cancellation.Token);
                 var identities = await _client.SearchIdentitiesAsync(text.Trim(), cancellation.Token);
                 cancellation.Token.ThrowIfCancellationRequested();
-                foreach (var identity in identities)
+                if (!CanEdit)
+                    return;
+                foreach (var identity in identities.Where(x => !Reviewers.Any(y => string.Equals(y.Id, x.Id, StringComparison.OrdinalIgnoreCase))))
                     SearchResults.Add(identity);
+                ReviewerSearchStatus = SearchResults.Count == 0 ? App.Text("CreatePR.NoReviewersFound") : string.Empty;
             }
             catch (OperationCanceledException) { }
-            catch (Exception ex) { if (!_disposed && !cancellation.IsCancellationRequested) ShowError(ex); }
+            catch (Exception ex)
+            {
+                if (!_disposed && !cancellation.IsCancellationRequested)
+                    ReviewerSearchStatus = App.Text("CreatePR.Error." + (ex is ServiceException service ? service.Code : "Connection"));
+            }
+            finally
+            {
+                if (ReferenceEquals(_searchCancellation, cancellation))
+                {
+                    _searchCancellation = null;
+                    IsSearchingReviewers = false;
+                }
+            }
         }
 
         private async Task<string> ReadLocalTipAsync(CancellationToken cancellationToken)
@@ -544,7 +668,6 @@ namespace SourceGit.ViewModels
             _disposed = true;
             _lifetime.Cancel();
             _searchCancellation?.Cancel();
-            _searchCancellation?.Dispose();
             _commitCancellation?.Cancel();
             _http.Dispose();
             _lifetime.Dispose();
@@ -564,6 +687,8 @@ namespace SourceGit.ViewModels
         private CancellationTokenSource _commitCancellation;
         private readonly Func<ConnectionSettings, string, Task<IAuthentication>> _authenticationFactory;
         private readonly Func<string, string, Task<PersonalAccessTokenAuthentication>> _personalAccessTokenFactory;
+        private readonly Func<CancellationToken, Task<Commands.PullRequestBranchOrigin>> _branchOriginReader;
+        private List<string> _recentTargetRefs = [];
         private IAuthentication _auth;
         private Client _client;
         private RepositoryCreationStore _store;
@@ -582,8 +707,9 @@ namespace SourceGit.ViewModels
         private string _description = string.Empty;
         private string _mergeMessage;
         private string _searchText = string.Empty;
+        private string _reviewerSearchStatus = string.Empty;
         private GitRef _target;
-        private Identity _selectedSearchResult;
+        private bool _searchingReviewers;
         private bool _connectionExpanded;
         private bool _sessionOnly;
         private bool _connected;

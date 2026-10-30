@@ -54,7 +54,7 @@
           <TextBlock Grid.Column="1" Text="→" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,8"/>
           <StackPanel Grid.Column="2" Spacing="4">
             <TextBlock Text="{DynamicResource Text.CreatePR.Target}"/>
-            <ComboBox ItemsSource="{Binding Branches}" SelectedItem="{Binding Target, Mode=TwoWay}" HorizontalAlignment="Stretch" IsEnabled="{Binding CanEdit}" PlaceholderText="{DynamicResource Text.CreatePR.SelectTarget}">
+            <ComboBox x:Name="TargetBranch" ItemsSource="{Binding Branches}" SelectedItem="{Binding Target, Mode=OneWay}" SelectionChanged="OnTargetSelectionChanged" DropDownOpened="OnTargetDropDownOpened" HorizontalAlignment="Stretch" IsEnabled="{Binding CanEdit}" PlaceholderText="{DynamicResource Text.CreatePR.SelectTarget}">
               <ComboBox.ItemTemplate><DataTemplate x:DataType="ado:GitRef"><TextBlock Text="{Binding BranchName}"/></DataTemplate></ComboBox.ItemTemplate>
             </ComboBox>
           </StackPanel>
@@ -69,15 +69,20 @@
             <TextBox Text="{Binding Description, Mode=TwoWay}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" MaxHeight="200"/>
           </StackPanel>
           <TextBlock Text="{DynamicResource Text.CreatePR.Reviewers}"/>
-          <TextBox Text="{Binding SearchText, Mode=TwoWay}" Watermark="{DynamicResource Text.CreatePR.SearchReviewers}"/>
-          <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding SearchResults.Count}">
-            <ListBox Grid.Column="0" ItemsSource="{Binding SearchResults}" SelectedItem="{Binding SelectedSearchResult, Mode=TwoWay}" MaxHeight="130">
-              <ListBox.ItemTemplate>
-                <DataTemplate x:DataType="ado:Identity"><StackPanel><TextBlock Text="{Binding Label}"/><TextBlock Text="{Binding Detail}" Foreground="{DynamicResource Brush.FG2}"/></StackPanel></DataTemplate>
-              </ListBox.ItemTemplate>
-            </ListBox>
-            <Button Grid.Column="1" Classes="flat" Content="{DynamicResource Text.CreatePR.AddReviewer}" Click="OnAddReviewer" Margin="8,0,0,0" VerticalAlignment="Top"/>
-          </Grid>
+          <TextBox x:Name="ReviewerSearchBox" Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Watermark="{DynamicResource Text.CreatePR.SearchReviewers}"/>
+          <TextBlock Text="{Binding ReviewerSearchStatus}" IsVisible="{Binding ReviewerSearchStatus.Length}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.FG2}"/>
+          <ScrollViewer IsVisible="{Binding SearchResults.Count}" MaxHeight="170" HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl x:Name="ReviewerSuggestions" ItemsSource="{Binding SearchResults}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="ado:Identity">
+                  <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                    <StackPanel Grid.Column="0"><TextBlock Text="{Binding Label}" TextWrapping="Wrap"/><TextBlock Text="{Binding Detail}" Foreground="{DynamicResource Brush.FG2}" TextWrapping="Wrap"/></StackPanel>
+                    <Button Grid.Column="1" Classes="flat" Content="{DynamicResource Text.CreatePR.AddReviewer}" Click="OnAddReviewer" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
           <ItemsControl ItemsSource="{Binding Reviewers}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:PullRequestReviewer">

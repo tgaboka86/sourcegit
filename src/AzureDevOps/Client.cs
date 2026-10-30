@@ -110,9 +110,27 @@ namespace SourceGit.AzureDevOps
 
         public async Task<List<Identity>> SearchIdentitiesAsync(string term, CancellationToken cancellationToken)
         {
-            var path = $"https://vssps.dev.azure.com/{Uri.EscapeDataString(Address.Organization)}/_apis/identities?searchFilter=General&queryMembership=None&filterValue={Uri.EscapeDataString(term)}";
-            var result = await GetAsync(path, ApiJsonContext.Default.ListResultIdentity, cancellationToken).ConfigureAwait(false);
-            return result.Value.Where(x => x.IsActive && Guid.TryParse(x.Id, out _)).Take(50).ToList();
+            try
+            {
+                var root = $"https://vssps.dev.azure.com/{Uri.EscapeDataString(Address.Organization)}/_apis/";
+                using var response = await SendAsync(HttpMethod.Post, root + "graph/subjectquery",
+                    JsonSerializer.Serialize(new SubjectQuery { Query = term }, ApiJsonContext.Default.SubjectQuery), cancellationToken, "7.1-preview.1").ConfigureAwait(false);
+                var matches = await ReadAsync(response, ApiJsonContext.Default.ListResultGraphSubject, cancellationToken).ConfigureAwait(false);
+                var descriptors = matches.Value.Select(x => x.Descriptor).Where(x => !string.IsNullOrEmpty(x)).Distinct().Take(50);
+                var result = new List<Identity>();
+                foreach (var batch in descriptors.Chunk(25))
+                {
+                    // Graph origin IDs are not PR reviewer IDs. Resolve the stable Azure DevOps identities.
+                    var identities = await GetAsync(root + "identities?queryMembership=None&subjectDescriptors=" + Uri.EscapeDataString(string.Join(',', batch)),
+                        ApiJsonContext.Default.ListResultIdentity, cancellationToken).ConfigureAwait(false);
+                    result.AddRange(identities.Value.Where(x => x.IsActive && Guid.TryParse(x.Id, out _)));
+                }
+                return result.DistinctBy(x => x.Id, StringComparer.OrdinalIgnoreCase).OrderBy(x => x.Label, StringComparer.OrdinalIgnoreCase).ToList();
+            }
+            catch (ServiceException ex) when (ex.StatusCode == 403)
+            {
+                throw new ServiceException("ReviewerSearchPermission", ex.StatusCode);
+            }
         }
 
         public async Task<List<Identity>> ResolveIdentitiesAsync(IEnumerable<string> ids, CancellationToken cancellationToken)

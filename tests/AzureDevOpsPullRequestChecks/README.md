@@ -10,6 +10,8 @@ PAT regression cases cover Basic authentication, masked input, account identific
 
 Commit-default checks cover single and multiple commits, complete messages across paginated comparisons, Unicode and multiline bodies, cancelled target changes, and preserving manual edits during delayed responses. Dialog checks verify the collapsed completion summary, first-use defaults, remembered overrides, and automatic source validation/retry without a separate refresh step.
 
+Picker checks cover recent-target ordering without duplicates, selection stability, real Git reflog records, named/unique creation targets and ambiguous fallbacks, partial-name searches without Enter, Graph descriptor resolution, direct row Add buttons, stale-search cancellation, permission feedback, and reviewer/Required persistence even when no PR is created. Native render output includes reviewer suggestions in both themes.
+
 Build into a separate output directory to avoid locking a running SourceGit installation:
 
 ```powershell

@@ -20,6 +20,7 @@ namespace SourceGit.AzureDevOps
     public sealed class PullRequestDefaults
     {
         public string TargetRef { get; set; } = string.Empty;
+        public List<string> RecentTargetRefs { get; set; } = [];
         public List<ReviewerSelection> Reviewers { get; set; } = [];
         public bool AutoComplete { get; set; } = true;
         public string MergeStrategy { get; set; } = "squash";
@@ -85,6 +86,17 @@ namespace SourceGit.AzureDevOps
     public sealed class IdentityProperty
     {
         [JsonPropertyName("$value")] public string Value { get; set; }
+    }
+
+    public sealed class SubjectQuery
+    {
+        public string Query { get; set; }
+        public string[] SubjectKind { get; set; } = ["User", "Group"];
+    }
+
+    public sealed class GraphSubject
+    {
+        public string Descriptor { get; set; }
     }
 
     public sealed class ListResult<T>

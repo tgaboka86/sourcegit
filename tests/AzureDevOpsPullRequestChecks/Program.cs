@@ -58,6 +58,8 @@ internal static class Program
             CheckDialog(fixture, args.Contains("--render"));
             CheckTokenDialog(fixture, args.Contains("--render"));
             CheckCommitDefaults(fixture);
+            CheckReviewerSuggestionsAndTargets(fixture, args.Contains("--render"));
+            CheckBranchOrigins(fixture);
         }
         finally
         {
@@ -310,8 +312,7 @@ internal static class Program
         Check(model.CompletionSummary.StartsWith("Draft (auto-complete off)"), "draft summary does not imply auto-complete will run");
         model.IsDraft = false;
         Check(model.MergeMessage == model.Title, "squash message follows fresh title");
-        model.SelectedSearchResult = FakeServer.Reviewer();
-        model.AddReviewer();
+        model.AddReviewer(FakeServer.Reviewer());
         model.Reviewers[0].IsRequired = true;
         Check(model.CanCreate, "valid published branch allows creation");
         Check(window.GetVisualDescendants().OfType<TextBox>().Any(x => x.AcceptsReturn), "native description accepts newlines");
@@ -442,6 +443,157 @@ internal static class Program
         Preferences.Instance.AzureDevOpsConnection = previous;
     }
 
+    private static void CheckReviewerSuggestionsAndTargets(string fixture, bool render)
+    {
+        var repo = new Repository(false, fixture, Path.Combine(fixture, ".git"));
+        var server = new FakeServer();
+        foreach (var name in new[] { "alpha", "beta", "gamma", "delta" })
+            server.OtherBranches.Add(new() { Name = "refs/heads/" + name, ObjectId = new('d', 40) });
+        server.Directory.Add(new() { Id = "99999999-9999-9999-9999-999999999999", DisplayName = "Second reviewer", UniqueName = "second@example.invalid", IsActive = true });
+        CreatePullRequest NewModel() => new(repo, new() { Name = "origin", URL = Address.WebUrl },
+            new() { Name = "feature/widgets", Remote = "origin", FullName = "refs/remotes/origin/feature/widgets" },
+            http: new HttpClient(server, false), authenticationFactory: (_, _) => Task.FromResult<IAuthentication>(new FakeAuthentication("picker-account")));
+        using var model = NewModel();
+        var window = new SourceGit.Views.CreatePullRequest { DataContext = model, ShowInTaskbar = false, ShowActivated = false };
+        window.Show();
+        PumpUntil(() => !model.IsBusy);
+        foreach (var name in new[] { "gamma", "main", "beta", "gamma", "delta" })
+        {
+            model.Target = model.Branches.Single(x => x.BranchName == name);
+            PumpUntil(() => !model.IsLoadingCommits);
+        }
+        window.FindControl<ComboBox>("TargetBranch").IsDropDownOpen = true;
+        Dispatcher.UIThread.RunJobs();
+        window.FindControl<ComboBox>("TargetBranch").IsDropDownOpen = false;
+        Check(model.Branches.Select(x => x.BranchName).SequenceEqual(new[] { "delta", "gamma", "beta", "alpha", "main" }), "three distinct recent targets precede other alphabetically sorted branches");
+        Check(model.Target?.BranchName == "delta" && window.FindControl<ComboBox>("TargetBranch").SelectedItem == model.Target && model.Title.Length > 0, "reordering recent targets preserves the native selection and loaded title");
+        var searchBox = window.FindControl<TextBox>("ReviewerSearchBox");
+        searchBox.Focus();
+        searchBox.Text = "Ex";
+        PumpUntil(() => !model.IsSearchingReviewers && model.SearchResults.Count == 1);
+        Check(model.SearchText == "Ex" && server.SearchQueries.Last() == "Ex", "typing a partial name starts a search without Enter or lost focus");
+        Check(model.SearchResults[0].Id == ReviewerId, "Graph subjects resolve to actual PR reviewer IDs");
+        if (render)
+        {
+            foreach (var theme in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+            {
+                App.Current.RequestedThemeVariant = theme;
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                using var bitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height), new Vector(96, 96));
+                bitmap.Render(window);
+                bitmap.Save(Path.Combine(AppContext.BaseDirectory, "reviewer-suggestions-" + theme.Key + ".png"));
+            }
+        }
+        var add = window.GetVisualDescendants().OfType<Button>().Single(x => x.DataContext is Identity identity && identity.Id == ReviewerId);
+        add.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Check(model.Reviewers.Count == 1 && model.SearchText.Length == 0, "row Add button adds a reviewer directly without a selection step");
+        model.AddReviewer(FakeServer.Reviewer());
+        Check(model.Reviewers.Count == 1, "duplicate reviewer addition is ignored");
+        model.Reviewers[0].IsRequired = true;
+        using var restored = NewModel();
+        var initialize = restored.InitializeAsync();
+        PumpUntil(() => initialize.IsCompleted);
+        Check(restored.Target?.BranchName == "delta" && restored.Branches.Take(3).Select(x => x.BranchName).SequenceEqual(new[] { "delta", "gamma", "beta" }), "recent targets survive reopening without creating a PR");
+        Check(restored.Reviewers.Single().Id == ReviewerId && restored.Reviewers[0].IsRequired, "selected reviewer and Required flag are restored before any PR is created");
+        {
+            var restart = Path.Combine(fixture, "picker-restart");
+            System.IO.Directory.CreateDirectory(restart);
+            File.Copy(Path.Combine(fixture, ".git", "sourcegit.settings"), Path.Combine(restart, "sourcegit.settings"));
+            var disk = SourceGit.Models.RepositorySettings.Get(restart);
+            var choices = disk.AzureDevOpsPullRequests.Single(x => x.Key.EndsWith("/picker-account")).Value;
+            Check(choices.RecentTargetRefs.Count == 3 && choices.Reviewers.Single().IsRequired, "target history and reviewer choice persist to disk");
+        }
+        restored.SearchText = "Ex";
+        PumpUntil(() => !restored.IsSearchingReviewers);
+        Check(restored.SearchResults.Count == 0, "already selected reviewers are excluded from suggestions");
+        restored.RemoveReviewer(restored.Reviewers[0]);
+        using var cleared = NewModel();
+        initialize = cleared.InitializeAsync();
+        PumpUntil(() => initialize.IsCompleted);
+        Check(cleared.Reviewers.Count == 0, "removing the last reviewer is also remembered");
+        var gate = new TaskCompletionSource();
+        server.SearchGates["Ex"] = gate.Task;
+        var queryCount = server.SearchQueries.Count;
+        restored.SearchText = string.Empty;
+        restored.SearchText = "Ex";
+        PumpUntil(() => server.SearchQueries.Count > queryCount);
+        restored.SearchText = "Sec";
+        PumpUntil(() => !restored.IsSearchingReviewers && restored.SearchResults.Count == 1);
+        Check(restored.SearchResults[0].Label == "Second reviewer", "new text can finish while a previous search is still pending");
+        var completed = server.CompletedSearches;
+        gate.SetResult();
+        PumpUntil(() => server.CompletedSearches > completed);
+        Check(restored.SearchResults.Single().Label == "Second reviewer", "late cancelled results cannot replace current suggestions");
+        server.DenyReviewerSearch = true;
+        restored.SearchText = "Missing";
+        PumpUntil(() => !restored.IsSearchingReviewers);
+        Check(restored.SearchResults.Count == 0 && restored.ReviewerSearchStatus.Contains("Graph (Read)"), "search permission failures are explained beside reviewer input");
+        Check(server.Posts == 0 && server.Patches == 0 && server.ReviewerWrites == 0, "suggesting and remembering choices never creates or changes a PR");
+        window.Close();
+    }
+
+    private static void CheckBranchOrigins(string fixture)
+    {
+        var directory = Path.Combine(fixture, "branch-origins");
+        System.IO.Directory.CreateDirectory(directory);
+        string Git(params string[] arguments)
+        {
+            var info = new ProcessStartInfo("git") { WorkingDirectory = directory, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+            foreach (var argument in arguments) info.ArgumentList.Add(argument);
+            using var process = Process.Start(info);
+            var output = process.StandardOutput.ReadToEnd();
+            var error = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            if (process.ExitCode != 0) throw new Exception("Fixture git command failed: " + error);
+            return output.Trim();
+        }
+        Git("init", "-b", "main");
+        Git("-c", "user.name=Example Developer", "-c", "user.email=developer@example.invalid", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=unused-hooks", "commit", "--allow-empty", "-m", "Initial fixture");
+        var tip = Git("rev-parse", "HEAD");
+        Git("branch", "feature/named", "main");
+        Git("branch", "feature/commit", tip);
+        Git("-c", "core.logAllRefUpdates=false", "branch", "feature/no-record", "main");
+        SourceGit.Commands.PullRequestBranchOrigin Read(string name)
+        {
+            var read = new SourceGit.Commands.ReadPullRequestBranchOrigin(directory, "refs/heads/" + name).GetOriginAsync(CancellationToken.None);
+            PumpUntil(() => read.IsCompleted);
+            return read.GetAwaiter().GetResult();
+        }
+        Check(Read("feature/named").StartPoint == "main", "read explicit creation branch from a real Git reflog");
+        Check(Read("feature/commit") is { } origin && origin.StartPoint == tip && origin.CommitId == tip, "read commit-based branch creation from Git");
+        Check(Read("feature/no-record") == null, "missing branch-creation record yields no guess");
+        var repo = new Repository(false, fixture, Path.Combine(fixture, ".git"));
+        var server = new FakeServer();
+        server.OtherBranches.Add(new() { Name = "refs/heads/release", ObjectId = new('d', 40) });
+        SourceGit.Commands.PullRequestBranchOrigin supplied = null;
+        CreatePullRequest Open()
+        {
+            var model = new CreatePullRequest(repo, new() { Name = "origin", URL = Address.WebUrl },
+                new() { Name = "feature/widgets", Remote = "origin", FullName = "refs/remotes/origin/feature/widgets" },
+                http: new HttpClient(server, false), authenticationFactory: (_, _) => Task.FromResult<IAuthentication>(new FakeAuthentication("origin-account")),
+                branchOriginReader: _ => Task.FromResult(supplied));
+            var load = model.InitializeAsync();
+            PumpUntil(() => load.IsCompleted);
+            return model;
+        }
+        using (var initial = Open())
+        {
+            initial.Target = initial.Branches.Single(x => x.BranchName == "release");
+            PumpUntil(() => !initial.IsLoadingCommits);
+        }
+        supplied = new("refs/heads/main", new('c', 40));
+        using (var named = Open()) Check(named.Target?.Name == Target && named.Title.Length > 0, "named creation branch takes priority over the last-used target and loads commit text");
+        supplied = new(new('c', 40), new('c', 40));
+        using (var exact = Open()) Check(exact.Target?.Name == Target, "unique remote tip at the creation commit supplies the default target");
+        server.OtherBranches.Add(new() { Name = "refs/heads/same-tip", ObjectId = new('c', 40) });
+        using (var ambiguous = Open()) Check(ambiguous.Target?.BranchName == "release", "ambiguous creation commit falls back to last-used target");
+        supplied = null;
+        using (var missing = Open()) Check(missing.Target?.BranchName == "release", "missing reflog falls back to last-used target");
+        supplied = new("refs/heads/deleted", new('c', 40));
+        using (var deleted = Open()) Check(deleted.Target?.BranchName == "release", "deleted origin branch does not cause a guessed target");
+    }
+
     private static async Task CheckPersonalAccessTokenAsync()
     {
         const string token = "synthetic-pat-for-checks";
@@ -530,8 +682,7 @@ internal static class Program
         model.Target = model.Branches.Single(x => x.Name == Target);
         PumpUntil(() => !model.IsLoadingCommits);
         model.AutoComplete = true;
-        model.SelectedSearchResult = FakeServer.Reviewer();
-        model.AddReviewer();
+        model.AddReviewer(FakeServer.Reviewer());
         var submit = model.SubmitAsync();
         PumpUntil(() => submit.IsCompleted);
         Check(model.IsFinished && model.HasResultLink && string.IsNullOrEmpty(model.Error), "PAT creates PR, resolves reviewers, and verifies completion settings");
@@ -632,6 +783,12 @@ internal static class Program
         public string ExpectedAuthorization = "Bearer fixture-token";
         public string AccountId = ReviewerId;
         public List<GitCommit> Commits = [new() { CommitId = new('a', 40), Comment = "Improve widget selection" }];
+        public List<GitRef> OtherBranches { get; } = [];
+        public List<Identity> Directory { get; } = [Reviewer()];
+        public List<string> SearchQueries { get; } = [];
+        public Dictionary<string, Task> SearchGates { get; } = [];
+        public int CompletedSearches;
+        public bool DenyReviewerSearch;
         public Dictionary<string, string> FullComments { get; } = [];
         public Task CommitGate;
         public int CommitPages, CommitDetails;
@@ -654,11 +811,29 @@ internal static class Program
                 identity.Id = AccountId;
                 return Json(new ConnectionData { AuthenticatedUser = identity }, ApiJsonContext.Default.ConnectionData);
             }
+            if (path.EndsWith("/graph/subjectquery"))
+            {
+                Check(request.Method == HttpMethod.Post && query["api-version"] == "7.1-preview.1", "reviewer suggestions use the documented read-only Graph query");
+                var search = JsonSerializer.Deserialize(await request.Content.ReadAsStringAsync(cancellationToken), ApiJsonContext.Default.SubjectQuery);
+                Check(search.SubjectKind.SequenceEqual(new[] { "User", "Group" }), "search includes users and groups");
+                SearchQueries.Add(search.Query);
+                if (DenyReviewerSearch) return new(HttpStatusCode.Forbidden);
+                var matches = Directory.Where(x => x.Label.Contains(search.Query, StringComparison.OrdinalIgnoreCase)).Select(x => new GraphSubject { Descriptor = "subject-" + x.Id }).ToList();
+                if (SearchGates.TryGetValue(search.Query, out var gate))
+                    await gate; // Simulate a server that finishes a cancelled request late.
+                CompletedSearches++;
+                return Json(new ListResult<GraphSubject> { Value = matches }, ApiJsonContext.Default.ListResultGraphSubject);
+            }
             if (path.EndsWith("/identities"))
-                return Json(new ListResult<Identity> { Value = [Reviewer()] }, ApiJsonContext.Default.ListResultIdentity);
+            {
+                var subjects = query["subjectDescriptors"]?.Split(',');
+                var ids = query["identityIds"]?.Split(',');
+                var identities = Directory.Where(x => subjects != null ? subjects.Contains("subject-" + x.Id) : ids == null || ids.Contains(x.Id)).ToList();
+                return Json(new ListResult<Identity> { Value = identities }, ApiJsonContext.Default.ListResultIdentity);
+            }
             if (path.EndsWith("/commits"))
             {
-                Check(query["searchCriteria.compareVersion.version"] == SourceTip && query["searchCriteria.itemVersion.version"] == new string('c', 40), "commit comparison walks from the source tip with the target as the baseline");
+                Check(query["searchCriteria.compareVersion.version"] == SourceTip && new[] { new string('c', 40) }.Concat(OtherBranches.Select(x => x.ObjectId)).Contains(query["searchCriteria.itemVersion.version"]), "commit comparison walks from the source tip with the target as the baseline");
                 Check(query["searchCriteria.itemVersion.versionType"] == "commit" && query["searchCriteria.compareVersion.versionType"] == "commit" && query["searchCriteria.showOldestCommitsFirst"] == null, "comparison does not request oldest-first mode that ignores branch filters");
                 CommitPages++;
                 var result = Commits.Skip(int.Parse(query["$skip"])).Take(int.Parse(query["$top"])).ToList();
@@ -676,6 +851,7 @@ internal static class Program
             if (path.EndsWith("/refs"))
             {
                 var refs = new List<GitRef> { new() { Name = Target, ObjectId = new('c', 40) } };
+                refs.AddRange(OtherBranches);
                 if (!SourceMissing) refs.Add(new() { Name = Source, ObjectId = SourceTip });
                 return Json(new ListResult<GitRef> { Value = refs.Where(x => x.Name[5..].StartsWith(query["filter"], StringComparison.Ordinal)).ToList() }, ApiJsonContext.Default.ListResultGitRef);
             }
