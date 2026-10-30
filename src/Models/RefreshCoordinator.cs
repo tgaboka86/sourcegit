@@ -50,6 +50,17 @@ namespace SourceGit.Models
             public Task Task;
         }
 
+        public event Action StateChanged;
+
+        public bool IsRefreshing
+        {
+            get
+            {
+                lock (_syncRoot)
+                    return !_disposed && _runningCount > 0;
+            }
+        }
+
         public RefreshCoordinator(Action<Exception> onError)
         {
             _onError = onError;
@@ -57,6 +68,7 @@ namespace SourceGit.Models
 
         public void Request(RefreshKind kind, Func<Context, Task> refresh)
         {
+            var notify = false;
             lock (_syncRoot)
             {
                 if (_disposed)
@@ -73,9 +85,13 @@ namespace SourceGit.Models
                 if (!state.Running)
                 {
                     state.Running = true;
+                    notify = ++_runningCount == 1;
                     state.Task = Task.Run(() => RunAsync(state));
                 }
             }
+
+            if (notify)
+                StateChanged?.Invoke();
         }
 
         public void Dispose()
@@ -91,6 +107,7 @@ namespace SourceGit.Models
             // Git process termination callbacks may wait for the process to exit.
             // Mark the repository closed immediately, then run those callbacks off the UI thread.
             _ = CancelAsync();
+            StateChanged?.Invoke();
         }
 
         private async Task CancelAsync()
@@ -136,7 +153,11 @@ namespace SourceGit.Models
                 lock (_syncRoot)
                 {
                     if (_disposed)
+                    {
+                        state.Running = false;
+                        _runningCount--;
                         return;
+                    }
 
                     cancellation = CancellationTokenSource.CreateLinkedTokenSource(_cancellation.Token);
                     context = new Context(this, state, state.Version, cancellation.Token);
@@ -169,14 +190,22 @@ namespace SourceGit.Models
                     }
                 }
 
+                var completed = false;
+                var notify = false;
                 lock (_syncRoot)
                 {
                     if (_disposed || context.IsCurrent)
                     {
                         state.Running = false;
-                        return;
+                        notify = --_runningCount == 0;
+                        completed = true;
                     }
                 }
+
+                if (notify)
+                    StateChanged?.Invoke();
+                if (completed)
+                    return;
             }
         }
 
@@ -184,6 +213,7 @@ namespace SourceGit.Models
         private readonly Dictionary<RefreshKind, State> _states = new();
         private readonly CancellationTokenSource _cancellation = new();
         private readonly Action<Exception> _onError;
+        private int _runningCount;
         private bool _disposed;
     }
 }

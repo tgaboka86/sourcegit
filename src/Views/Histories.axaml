@@ -298,7 +298,7 @@
               Opacity=".8"/>
       </Border>
 
-      <v:LoadingIcon Width="48" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsLoading}"/>
+      <v:LoadingIcon Width="48" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsInitialLoading}"/>
     </Grid>
 
     <GridSplitter Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"

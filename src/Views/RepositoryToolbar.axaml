@@ -5,6 +5,7 @@
              xmlns:m="using:SourceGit.Models"
              xmlns:vm="using:SourceGit.ViewModels"
              xmlns:c="using:SourceGit.Converters"
+             xmlns:v="using:SourceGit.Views"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
              x:Class="SourceGit.Views.RepositoryToolbar"
              x:DataType="vm:Repository">
@@ -24,6 +25,19 @@
     </StackPanel>
 
     <StackPanel Grid.Column="1" Orientation="Horizontal">
+      <!-- Reserve the slot so refresh activity never moves the toolbar buttons. -->
+      <Grid Width="32">
+        <Border Background="Transparent"
+                IsVisible="{Binding IsRefreshing}"
+                ToolTip.Tip="{DynamicResource Text.Repository.Refreshing}"
+                AutomationProperties.Name="{DynamicResource Text.Repository.Refreshing}">
+          <v:LoadingIcon Width="12" Height="12"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Opacity="0.65"
+                         IsVisible="{Binding IsRefreshing}"/>
+        </Border>
+      </Grid>
+
       <Button Classes="icon_button" Width="32" Tapped="Fetch">
         <ToolTip.Tip>
           <StackPanel Orientation="Vertical">

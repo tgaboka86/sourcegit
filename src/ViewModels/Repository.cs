@@ -411,6 +411,12 @@ namespace SourceGit.ViewModels
             private set => SetProperty(ref _isBisectCommandRunning, value);
         }
 
+        public bool IsRefreshing
+        {
+            get => _isRefreshing;
+            private set => SetProperty(ref _isRefreshing, value);
+        }
+
         public bool IsAutoFetching
         {
             get => _isAutoFetching;
@@ -463,7 +469,15 @@ namespace SourceGit.ViewModels
             _workingCopy = new WorkingCopy(this) { CommitMessage = _uiStates.LastCommitMessage };
             _stashesPage = new StashesPage(this);
             _selectedViewIndex = Preferences.Instance.ShowLocalChangesByDefault ? 1 : 0;
-            _refreshes = new Models.RefreshCoordinator(ex => SendNotification($"Failed to refresh repository: {ex.Message}", true));
+            var refreshes = new Models.RefreshCoordinator(ex => SendNotification($"Failed to refresh repository: {ex.Message}", true));
+            _refreshes = refreshes;
+            refreshes.StateChanged += () => Dispatcher.UIThread.Post(() =>
+            {
+                // Read the current state on the UI thread; queued notifications may
+                // arrive after another category starts, finishes, or the repo reopens.
+                if (ReferenceEquals(_refreshes, refreshes))
+                    IsRefreshing = refreshes.IsRefreshing;
+            });
             try
             {
                 _watcher = new Models.Watcher(this, FullPath, _gitCommonDir);
@@ -2024,6 +2038,7 @@ namespace SourceGit.ViewModels
         private object _visibleSubmodules = null;
         private string _navigateToCommitDelayed = string.Empty;
 
+        private bool _isRefreshing = false;
         private bool _isAutoFetching = false;
         private Timer _autoFetchTimer = null;
         private DateTime _lastFetchTime = DateTime.MinValue;

@@ -2,6 +2,7 @@ using SourceGit.Models;
 
 await CoalescesRequests();
 await CategoriesRunIndependently();
+await BusyStateCoversAllCategories();
 await RecoversAfterFailure();
 await CloseDiscardsPendingAndCancelsActive();
 await CloseDoesNotWaitForProcessTermination();
@@ -73,6 +74,46 @@ static async Task CategoriesRunIndependently()
     await independent.Task.WaitAsync(TimeSpan.FromSeconds(5));
     release.SetResult();
     await coordinator.WhenIdleAsync();
+}
+
+static async Task BusyStateCoversAllCategories()
+{
+    using var coordinator = new RefreshCoordinator(ex => throw ex);
+    var historyStarted = Signal();
+    var statusStarted = Signal();
+    var historyReleased = Signal();
+    var statusReleased = Signal();
+    var idle = Signal();
+    var observedBusy = false;
+    coordinator.StateChanged += () =>
+    {
+        if (coordinator.IsRefreshing)
+            observedBusy = true;
+        else
+            idle.TrySetResult();
+    };
+    coordinator.Request(RefreshKind.Commits, async _ =>
+    {
+        historyStarted.SetResult();
+        await historyReleased.Task;
+    });
+    coordinator.Request(RefreshKind.WorkingCopy, async _ =>
+    {
+        statusStarted.SetResult();
+        await statusReleased.Task;
+    });
+    await Task.WhenAll(historyStarted.Task, statusStarted.Task);
+    Check(observedBusy && coordinator.IsRefreshing, "Active refresh was not signalled.");
+    historyReleased.SetResult();
+    // Wait until just the history category is free, with the status query still blocked.
+    var historyCompleted = Signal();
+    coordinator.Request(RefreshKind.Commits, _ => { historyCompleted.SetResult(); return Task.CompletedTask; });
+    await historyCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    Check(coordinator.IsRefreshing && !idle.Task.IsCompleted, "Busy state ended while another category was active.");
+    statusReleased.SetResult();
+    await coordinator.WhenIdleAsync().WaitAsync(TimeSpan.FromSeconds(5));
+    await idle.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    Check(!coordinator.IsRefreshing, "Idle repository kept its busy state.");
 }
 
 static async Task RecoversAfterFailure()
@@ -156,6 +197,7 @@ static async Task CloseDiscardsPendingAndCancelsActive()
     await started.Task;
     coordinator.Request(RefreshKind.WorkingCopy, _ => { Interlocked.Increment(ref runs); return Task.CompletedTask; });
     coordinator.Dispose();
+    Check(!coordinator.IsRefreshing, "Closed repository kept its busy state.");
     coordinator.Dispose();
     coordinator.Request(RefreshKind.Tags, _ => throw new Exception("Request after close ran."));
     await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
