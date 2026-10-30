@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
@@ -133,18 +133,6 @@ namespace SourceGit.ViewModels
         {
             get => _maxHistoryCommits;
             set => SetProperty(ref _maxHistoryCommits, value);
-        }
-
-        public int RefreshThrottling
-        {
-            get => _refreshThrottling;
-            set => SetProperty(ref _refreshThrottling, Math.Clamp(value, 0, 5000));
-        }
-
-        public bool ManualRefresh
-        {
-            get => _manualRefresh;
-            set => SetProperty(ref _manualRefresh, value);
         }
 
         public int SubjectGuideLength
@@ -843,8 +831,6 @@ namespace SourceGit.ViewModels
         private LayoutInfo _layout = new();
 
         private int _maxHistoryCommits = 20000;
-        private int _refreshThrottling = 1000;
-        private bool _manualRefresh = false;
         private int _subjectGuideLength = 50;
         private int _workingDirectoryHeadMode = 2;
         private bool _useFixedTabWidth = true;
