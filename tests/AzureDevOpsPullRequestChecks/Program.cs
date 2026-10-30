@@ -49,6 +49,7 @@ internal static class Program
             git.ArgumentList.Add("main");
             using (var process = Process.Start(git)) process.WaitForExit();
             CheckBranchMenus(fixture);
+            CheckSignInFailure(fixture);
             CheckDialog(fixture, args.Contains("--render"));
         }
         finally
@@ -244,6 +245,37 @@ internal static class Program
         context.Http.Dispose();
     }
 
+    private static void CheckSignInFailure(string fixture)
+    {
+        var repo = new Repository(false, fixture, Path.Combine(fixture, ".git"));
+        var server = new FakeServer { RepositoryError = HttpStatusCode.Unauthorized };
+        var authentication = new FakeAuthentication();
+        using var model = new CreatePullRequest(repo,
+            new() { Name = "origin", URL = Address.WebUrl },
+            new() { Name = "feature/widgets", Remote = "origin", FullName = "refs/remotes/origin/feature/widgets" },
+            http: new HttpClient(server), authenticationFactory: (_, _) => Task.FromResult<IAuthentication>(authentication));
+        model.ClientId = "55555555-5555-5555-5555-555555555555";
+        var signIn = model.SignInAsync();
+        PumpUntil(() => signIn.IsCompleted);
+        signIn.GetAwaiter().GetResult();
+        Check(model.IsSignedIn && model.HasAccount && !model.IsConnected && !model.IsBusy, "successful sign-in remains distinct from repository access failure");
+        Check(model.Status == App.Text("CreatePR.RepositoryLoadFailed"), "repository failure does not keep the initial sign-in prompt");
+        Check(model.Error.Contains("401") && model.Error.Contains("Example account cannot read this repository"), "show HTTP status and server explanation");
+        Check(!model.ConnectionExpanded && model.RefreshLabel == App.Text("CreatePR.RetryConnection"), "signed-in user can retry repository loading");
+        Check(server.SuppressedAuthRedirects, "API requests suppress federated HTML login redirects");
+        server.ExpectedTenant = "77777777-7777-7777-7777-777777777777";
+        var mismatch = model.RefreshAsync();
+        PumpUntil(() => mismatch.IsCompleted);
+        Check(model.Error.Contains(server.ExpectedTenant) && model.Error.Contains(authentication.TenantId) && model.Error.Contains("multi-tenant"), "tenant mismatch provides the expected directory without changing configuration");
+        Check(model.Tenant == "organizations" && model.IsSignedIn, "server tenant hint does not automatically switch the sign-in authority");
+        server.RepositoryError = null;
+        var retry = model.RefreshAsync();
+        PumpUntil(() => retry.IsCompleted);
+        retry.GetAwaiter().GetResult();
+        Check(model.IsConnected && model.IsSignedIn && authentication.SignIns == 1, "retry reuses sign-in without reopening the browser");
+        Check(server.Posts == 0 && server.Patches == 0, "sign-in and connection retry do not mutate the repository");
+    }
+
     private static void CheckDialog(string fixture, bool render)
     {
         var repo = new Repository(false, fixture, Path.Combine(fixture, ".git"));
@@ -342,10 +374,12 @@ internal static class Program
 
     private sealed class FakeAuthentication(string accountId = "fixture-account") : IAuthentication
     {
+        public int SignIns { get; private set; }
         public string AccountId => accountId;
         public string UserName => "reviewer@example.invalid";
+        public string TenantId => "88888888-8888-8888-8888-888888888888";
         public bool SessionOnly => true;
-        public Task SignInAsync(CancellationToken token) => Task.CompletedTask;
+        public Task SignInAsync(CancellationToken token) { SignIns++; return Task.CompletedTask; }
         public Task SignOutAsync() => Task.CompletedTask;
         public Task<string> GetTokenAsync(CancellationToken token) => Task.FromResult("fixture-token");
         public void Dispose() { }
@@ -355,6 +389,9 @@ internal static class Program
     {
         public string SourceTip = new('a', 40);
         public bool SourceMissing, IgnoreRequiredAtCreation, FailPatchOnce, LoseCreateResponse, MoveSourceAfterCreate, RejectCreate;
+        public HttpStatusCode? RepositoryError;
+        public string ExpectedTenant;
+        public bool SuppressedAuthRedirects;
         public int Posts, Patches, ReviewerWrites;
         public PullRequest Current;
         public CreateRequest LastCreate;
@@ -365,6 +402,8 @@ internal static class Program
             Check(request.Headers.Authorization?.Parameter == "fixture-token", "authenticated request");
             var path = request.RequestUri.AbsolutePath;
             var query = HttpUtility.ParseQueryString(request.RequestUri.Query);
+            SuppressedAuthRedirects = request.Headers.TryGetValues("X-TFS-FedAuthRedirect", out var fedAuth) && fedAuth.Single() == "Suppress" &&
+                request.Headers.TryGetValues("X-VSS-ReauthenticationAction", out var reauthentication) && reauthentication.Single() == "Suppress";
             if (path.EndsWith("/identities"))
                 return Json(new ListResult<Identity> { Value = [Reviewer()] }, ApiJsonContext.Default.ListResultIdentity);
             if (path.EndsWith("/refs"))
@@ -408,6 +447,12 @@ internal static class Program
                 return Json(new ListResult<PullRequest> { Value = Current == null ? [] : [Current] }, ApiJsonContext.Default.ListResultPullRequest);
             if (path.EndsWith("/pullrequests/17"))
                 return Json(Current, ApiJsonContext.Default.PullRequest);
+            if (RepositoryError is { } errorStatus)
+            {
+                var failure = new HttpResponseMessage(errorStatus) { Content = new StringContent("{\"message\":\"Example account cannot read this repository.\"}", Encoding.UTF8, "application/json") };
+                if (ExpectedTenant != null) failure.Headers.TryAddWithoutValidation("X-VSS-ResourceTenant", ExpectedTenant);
+                return failure;
+            }
             return Json(new RepositoryInfo { Id = "22222222-2222-2222-2222-222222222222", Name = "sample-repo", Project = new() { Id = "11111111-1111-1111-1111-111111111111", Name = "sample-project" }, DefaultBranch = Target }, ApiJsonContext.Default.RepositoryInfo);
         }
 

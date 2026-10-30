@@ -35,6 +35,9 @@ namespace SourceGit.ViewModels
         public string AccountName { get => _accountName; private set => SetProperty(ref _accountName, value); }
         public bool SessionOnly { get => _sessionOnly; private set => SetProperty(ref _sessionOnly, value); }
         public bool IsConnected { get => _connected; private set { SetProperty(ref _connected, value); NotifyState(); } }
+        public bool IsSignedIn { get => _signedIn; private set { SetProperty(ref _signedIn, value); NotifyState(); } }
+        public bool HasAccount => !string.IsNullOrEmpty(_auth?.AccountId);
+        public string RefreshLabel => App.Text(IsConnected ? "CreatePR.Refresh" : "CreatePR.RetryConnection");
         public bool IsBusy { get => _busy; private set { SetProperty(ref _busy, value); NotifyState(); } }
         public bool CanEdit => IsConnected && !IsBusy && !IsFinished && _store?.Pending == null;
         public bool IsFinished { get => _finished; private set { SetProperty(ref _finished, value); NotifyState(); } }
@@ -102,6 +105,9 @@ namespace SourceGit.ViewModels
         private Task ConnectAsync(bool interactive) => RunAsync(async () =>
         {
             IsConnected = false;
+            IsSignedIn = false;
+            AccountName = string.Empty;
+            Status = App.Text(interactive ? "CreatePR.SigningIn" : "CreatePR.RestoringSignIn");
             _sourceValid = false;
             _result = null;
             IsFinished = false;
@@ -121,17 +127,21 @@ namespace SourceGit.ViewModels
             if (interactive)
                 await _auth.SignInAsync(_lifetime.Token);
             await _auth.GetTokenAsync(_lifetime.Token);
+            IsSignedIn = true;
+            AccountName = _auth.UserName;
+            SessionOnly = _auth.SessionOnly;
+            ConnectionExpanded = false;
             settings.AccountId = _auth.AccountId;
             Preferences.Instance.AzureDevOpsConnection = settings;
             Preferences.Instance.Save();
-            AccountName = _auth.UserName;
-            SessionOnly = _auth.SessionOnly;
             _client = new Client(_http, _address, _auth.GetTokenAsync);
+            Status = App.Text("CreatePR.LoadingRepository");
             var info = await _client.ResolveAsync(_lifetime.Token);
             RepositoryLabel = $"{_address.Organization} / {info.Project.Name} / {info.Name}";
             _preferenceKey = _client.PreferenceKey(_auth.AccountId);
             _store = new RepositoryCreationStore(_repo.Settings, _preferenceKey + "/" + _sourceRef);
             _service = new CreationService(_client, _store, ReadLocalTipAsync);
+            Status = App.Text("CreatePR.LoadingBranches");
             foreach (var branch in (await _client.GetBranchesAsync(_lifetime.Token)).Where(x => x.Name != _sourceRef).OrderBy(x => x.BranchName, StringComparer.Ordinal))
                 Branches.Add(branch);
 
@@ -144,6 +154,7 @@ namespace SourceGit.ViewModels
             if (MergeStrategy < 0)
                 MergeStrategy = 0;
             var selectedReviewers = pending?.Reviewers ?? defaults.Reviewers;
+            Status = App.Text("CreatePR.LoadingReviewers");
             var restored = await _client.ResolveIdentitiesAsync(selectedReviewers.Select(x => x.Id), _lifetime.Token);
             foreach (var saved in selectedReviewers)
             {
@@ -170,7 +181,7 @@ namespace SourceGit.ViewModels
             }
         });
 
-        public Task RefreshAsync() => RunAsync(async () =>
+        public Task RefreshAsync() => !IsConnected ? ConnectAsync(false) : RunAsync(async () =>
         {
             if (_client == null)
                 return;
@@ -184,6 +195,7 @@ namespace SourceGit.ViewModels
             if (_auth != null)
                 await _auth.SignOutAsync();
             IsConnected = false;
+            IsSignedIn = false;
             AccountName = string.Empty;
             Reviewers.Clear();
             Branches.Clear();
@@ -340,11 +352,25 @@ namespace SourceGit.ViewModels
 
         private void ShowError(Exception ex)
         {
-            Error = App.Text("CreatePR.Error." + (ex is ServiceException service ? service.Code : ex is MsalException ? "Authentication" : "Connection"));
+            var mismatchedTenant = ex is ServiceException { StatusCode: 401, ExpectedTenantId: not null } denied &&
+                Guid.TryParse(_auth?.TenantId, out var signedInTenant) && !denied.ExpectedTenantId.Equals(signedInTenant.ToString(), StringComparison.OrdinalIgnoreCase);
+            Error = mismatchedTenant ? App.Text("CreatePR.Error.TenantMismatch", ((ServiceException)ex).ExpectedTenantId, _auth.TenantId) :
+                App.Text("CreatePR.Error." + (ex is ServiceException service ? service.Code : ex is MsalException ? "Authentication" : "Connection"));
+            if (ex is ServiceException { StatusCode: > 0 } response)
+            {
+                Error += " " + App.Text("CreatePR.HttpStatus", response.StatusCode);
+                if (!mismatchedTenant && !string.IsNullOrWhiteSpace(response.ServerMessage))
+                    Error += Environment.NewLine + response.ServerMessage;
+            }
+            Status = App.Text(IsSignedIn && !IsConnected ? "CreatePR.RepositoryLoadFailed" : "CreatePR.RequestFailed");
             if (ex is ServiceException { Code: "SourceChanged" or "Unpublished" or "InvalidSource" })
                 _sourceValid = false;
             if (ex is ServiceException { Code: "SignInRequired" or "ConnectionSetup" })
+            {
+                IsSignedIn = false;
                 ConnectionExpanded = true;
+                Status = App.Text("CreatePR.ConnectPrompt");
+            }
             NotifyState();
         }
 
@@ -357,6 +383,8 @@ namespace SourceGit.ViewModels
             OnPropertyChanged(nameof(HasResultLink));
             OnPropertyChanged(nameof(PrimaryLabel));
             OnPropertyChanged(nameof(CanClearRecovery));
+            OnPropertyChanged(nameof(HasAccount));
+            OnPropertyChanged(nameof(RefreshLabel));
         }
 
         public void Dispose()
@@ -401,6 +429,7 @@ namespace SourceGit.ViewModels
         private bool _connectionExpanded;
         private bool _sessionOnly;
         private bool _connected;
+        private bool _signedIn;
         private bool _busy;
         private bool _finished;
         private bool _sourceValid;

@@ -127,8 +127,31 @@ namespace SourceGit.AzureDevOps
 
         private static async Task<T> ReadAsync<T>(HttpResponseMessage response, JsonTypeInfo<T> type, CancellationToken cancellationToken)
         {
-            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            return await JsonSerializer.DeserializeAsync(stream, type, cancellationToken).ConfigureAwait(false) ?? throw new ServiceException("InvalidResponse");
+            if (response.StatusCode == HttpStatusCode.NonAuthoritativeInformation && response.Content.Headers.ContentType?.MediaType == "text/html")
+                throw new ServiceException("Unauthorized", (int)response.StatusCode);
+            try
+            {
+                using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                return await JsonSerializer.DeserializeAsync(stream, type, cancellationToken).ConfigureAwait(false) ?? throw new ServiceException("InvalidResponse", (int)response.StatusCode);
+            }
+            catch (JsonException)
+            {
+                throw new ServiceException("InvalidResponse", (int)response.StatusCode);
+            }
+        }
+
+        private static async Task<string> ReadErrorAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+        {
+            if (response.Content.Headers.ContentType?.MediaType != "application/json")
+                return null;
+            try
+            {
+                using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                var error = await JsonSerializer.DeserializeAsync(stream, ApiJsonContext.Default.ErrorResponse, cancellationToken).ConfigureAwait(false);
+                var message = error?.Message?.Trim();
+                return message is { Length: > 1024 } ? message[..1024] + "…" : message;
+            }
+            catch (JsonException) { return null; }
         }
 
         private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, string json, CancellationToken cancellationToken)
@@ -138,6 +161,10 @@ namespace SourceGit.AzureDevOps
                 using var request = new HttpRequestMessage(method, path + (path.Contains('?') ? "&" : "?") + "api-version=7.1");
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await acquireToken(cancellationToken).ConfigureAwait(false));
                 request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                // Ask for an API error instead of an HTML federated sign-in redirect.
+                // Keep redirects disabled so bearer tokens cannot leave the selected services.
+                request.Headers.TryAddWithoutValidation("X-TFS-FedAuthRedirect", "Suppress");
+                request.Headers.TryAddWithoutValidation("X-VSS-ReauthenticationAction", "Suppress");
                 if (json != null)
                     request.Content = new StringContent(json, Encoding.UTF8, "application/json");
                 var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
@@ -153,16 +180,27 @@ namespace SourceGit.AzureDevOps
                     await Task.Delay(delay < TimeSpan.Zero ? TimeSpan.Zero : delay, cancellationToken).ConfigureAwait(false);
                     continue;
                 }
-                response.Dispose();
+                string serverMessage;
+                string expectedTenant = null;
+                if (response.Headers.TryGetValues("X-VSS-ResourceTenant", out var tenants))
+                {
+                    var tenant = tenants.FirstOrDefault();
+                    if (Guid.TryParse(tenant, out var tenantId) && tenantId != Guid.Empty)
+                        expectedTenant = tenantId.ToString();
+                }
+                try
+                { serverMessage = await ReadErrorAsync(response, cancellationToken).ConfigureAwait(false); }
+                finally { response.Dispose(); }
                 throw new ServiceException(status switch
                 {
-                    401 => "SignInRequired",
+                    401 => "Unauthorized",
                     403 => "Forbidden",
                     404 => "NotFound",
                     409 => "Conflict",
                     429 => "Throttled",
+                    >= 300 and < 400 => "UnexpectedRedirect",
                     _ => "ServerRejected",
-                }, status);
+                }, status, serverMessage, expectedTenant);
             }
         }
     }

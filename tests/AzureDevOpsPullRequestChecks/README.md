@@ -4,6 +4,8 @@ These executable regression checks cover remote parsing, published-source valida
 
 The HTTP handler and authentication provider are synthetic. The checks use a temporary local Git repository and temporary preferences, and make no live Azure DevOps requests. No user account or application registration is required.
 
+Sign-in regression cases distinguish successful Microsoft authentication from a denied repository request, verify tenant-mismatch explanations and API redirect suppression, and ensure retrying repository loading does not start another interactive sign-in or perform any writes.
+
 Build into a separate output directory to avoid locking a running SourceGit installation:
 
 ```powershell

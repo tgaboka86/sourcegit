@@ -20,6 +20,14 @@ Connection settings are saved in the local SourceGit preferences. Tokens are sto
 
 See Microsoft's [Entra integration guidance](https://learn.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/entra-oauth) and [desktop token-cache documentation](https://learn.microsoft.com/en-us/entra/msal/dotnet/how-to/token-cache-serialization?tabs=desktop).
 
+### Browser sign-in succeeds but repository loading fails
+
+Microsoft authentication and Azure DevOps authorization are separate steps. The dialog retains the signed-in account, shows the HTTP status and Azure DevOps error, and offers **Retry loading** without reopening the browser.
+
+If Azure DevOps reports a different organization tenant, use the tenant ID shown in the error. A single-tenant app must be registered in that directory. To reuse an app registered in another directory, it must support multiple organizational tenants and have the necessary consent in the target directory; enter the target directory's tenant ID in SourceGit. Changing an app to multi-tenant without changing the selected tenant does not resolve the mismatch. You can check the organization's existing directory under **Organization settings → Microsoft Entra ID**.
+
+If the tenants already match, check that the signed-in account has access to the organization and repository. SourceGit does not change organizational access policies or grant permissions.
+
 ## Create a pull request
 
 Select the target branch and review the title, description, and reviewers. The title starts from the source branch name. Add any number of users or groups and choose **Required** separately for each. The server's branch policies determine which approvals are necessary; SourceGit does not impose a particular issue tracker or review partner.

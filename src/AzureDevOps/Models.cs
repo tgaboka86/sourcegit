@@ -137,10 +137,17 @@ namespace SourceGit.AzureDevOps
         public CompletionOptions CompletionOptions { get; set; }
     }
 
-    public sealed class ServiceException(string code, int statusCode = 0) : Exception(code)
+    public sealed class ErrorResponse
+    {
+        public string Message { get; set; }
+    }
+
+    public sealed class ServiceException(string code, int statusCode = 0, string serverMessage = null, string expectedTenantId = null) : Exception(code)
     {
         public string Code { get; } = code;
         public int StatusCode { get; } = statusCode;
+        public string ServerMessage { get; } = serverMessage;
+        public string ExpectedTenantId { get; } = expectedTenantId;
         public bool IsDefinitiveRejection => (StatusCode is >= 400 and < 500 && StatusCode is not (408 or 429)) || (StatusCode == 0 && Code == "SignInRequired");
     }
 }

@@ -48,6 +48,15 @@
   <x:String x:Key="Text.CreatePR.RetrySetup">Retry setup</x:String>
   <x:String x:Key="Text.CreatePR.CheckCreation">Check creation</x:String>
   <x:String x:Key="Text.CreatePR.ConnectPrompt">Connect your Azure DevOps account to load branches and reviewers.</x:String>
+  <x:String x:Key="Text.CreatePR.SigningIn">Waiting for Microsoft sign-in…</x:String>
+  <x:String x:Key="Text.CreatePR.RestoringSignIn">Restoring your Microsoft sign-in…</x:String>
+  <x:String x:Key="Text.CreatePR.LoadingRepository">Signed in. Loading the Azure DevOps repository…</x:String>
+  <x:String x:Key="Text.CreatePR.LoadingBranches">Signed in. Loading branches…</x:String>
+  <x:String x:Key="Text.CreatePR.LoadingReviewers">Signed in. Checking remembered reviewers…</x:String>
+  <x:String x:Key="Text.CreatePR.RepositoryLoadFailed">Microsoft sign-in succeeded, but Azure DevOps repository data could not be loaded.</x:String>
+  <x:String x:Key="Text.CreatePR.RequestFailed">The operation could not be completed.</x:String>
+  <x:String x:Key="Text.CreatePR.RetryConnection">Retry loading</x:String>
+  <x:String x:Key="Text.CreatePR.HttpStatus">HTTP {0}.</x:String>
   <x:String x:Key="Text.CreatePR.SourceReady">The source branch is published and ready.</x:String>
   <x:String x:Key="Text.CreatePR.UnavailableReviewer">Unavailable reviewer — remove or replace this selection</x:String>
   <x:String x:Key="Text.CreatePR.PendingNotice">A previous creation attempt needs checking. Its original settings will be used for recovery.</x:String>
@@ -68,6 +77,9 @@
   <x:String x:Key="Text.CreatePR.Error.ReviewerUnavailable">A selected reviewer could not be resolved or its required status could not be verified. Remove or replace unavailable selections.</x:String>
   <x:String x:Key="Text.CreatePR.Error.ConnectionSetup">Enter a valid application ID and tenant ID (or organizations) in connection settings.</x:String>
   <x:String x:Key="Text.CreatePR.Error.SignInRequired">Sign in to your Azure DevOps account to continue.</x:String>
+  <x:String x:Key="Text.CreatePR.Error.Unauthorized">Azure DevOps did not authorize this account for the requested resource. Verify that the account has access to the organization and that its connected directory matches the sign-in tenant. You can sign out to choose another account.</x:String>
+  <x:String x:Key="Text.CreatePR.Error.TenantMismatch">This Azure DevOps organization expects tenant {0}, but your token was issued by tenant {1}. Use an app registered in the organization's tenant, or an approved multi-tenant app, and enter the organization's tenant ID in the connection settings.</x:String>
+  <x:String x:Key="Text.CreatePR.Error.UnexpectedRedirect">Azure DevOps returned a sign-in or service redirect instead of an API response. Verify the account and organization access; the redirect was not followed.</x:String>
   <x:String x:Key="Text.CreatePR.Error.Authentication">Microsoft sign-in failed or was cancelled. Check the application registration, tenant, and permissions, then sign in again.</x:String>
   <x:String x:Key="Text.CreatePR.Error.Connection">Could not connect to Azure DevOps. Check your connection and try again.</x:String>
   <x:String x:Key="Text.CreatePR.Error.UnsupportedRemote">This remote is not a supported Azure DevOps Services repository.</x:String>

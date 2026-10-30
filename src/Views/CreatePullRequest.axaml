@@ -31,7 +31,7 @@
             <TextBox Text="{Binding Tenant, Mode=TwoWay}"/>
             <StackPanel Orientation="Horizontal" Spacing="8">
               <Button Classes="flat primary" Content="{DynamicResource Text.CreatePR.SignIn}" Click="OnSignIn"/>
-              <Button Classes="flat" Content="{DynamicResource Text.CreatePR.SignOut}" Click="OnSignOut" IsEnabled="{Binding IsConnected}"/>
+              <Button Classes="flat" Content="{DynamicResource Text.CreatePR.SignOut}" Click="OnSignOut" IsEnabled="{Binding HasAccount}"/>
             </StackPanel>
           </StackPanel>
         </Expander>
@@ -109,10 +109,10 @@
     <StackPanel Grid.Row="2" Margin="22,4" Spacing="4">
       <ProgressBar IsIndeterminate="True" Height="3" IsVisible="{Binding IsBusy}"/>
       <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
-      <TextBlock Text="{Binding Error}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.FG2}"/>
+      <SelectableTextBlock Text="{Binding Error}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.FG2}"/>
     </StackPanel>
     <WrapPanel Grid.Row="3" HorizontalAlignment="Right" Margin="18,8,18,14">
-      <Button Classes="flat" Content="{DynamicResource Text.CreatePR.Refresh}" Click="OnRefresh" IsVisible="{Binding IsConnected}" IsEnabled="{Binding !IsBusy}" Margin="4"/>
+      <Button Classes="flat" Content="{Binding RefreshLabel}" Click="OnRefresh" IsVisible="{Binding IsSignedIn}" IsEnabled="{Binding !IsBusy}" Margin="4"/>
       <Button Classes="flat" Content="{DynamicResource Text.CreatePR.Open}" Click="OnOpenResult" IsVisible="{Binding HasResultLink}" Margin="4"/>
       <Button Classes="flat" Content="{DynamicResource Text.Close}" Click="OnClose" Margin="4"/>
       <Button Classes="flat primary" Content="{Binding PrimaryLabel}" Click="OnCreate" IsEnabled="{Binding CanCreate}" IsVisible="{Binding !IsFinished}" Margin="4"/>

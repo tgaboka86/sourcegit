@@ -12,5 +12,6 @@ namespace SourceGit.AzureDevOps
     [JsonSerializable(typeof(CreateRequest))]
     [JsonSerializable(typeof(UpdateRequest))]
     [JsonSerializable(typeof(ReviewerSelection))]
+    [JsonSerializable(typeof(ErrorResponse))]
     public partial class ApiJsonContext : JsonSerializerContext { }
 }

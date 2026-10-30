@@ -16,6 +16,7 @@ namespace SourceGit.AzureDevOps
     {
         string AccountId { get; }
         string UserName { get; }
+        string TenantId { get; }
         bool SessionOnly { get; }
         Task SignInAsync(CancellationToken cancellationToken);
         Task<string> GetTokenAsync(CancellationToken cancellationToken);
@@ -26,6 +27,7 @@ namespace SourceGit.AzureDevOps
     {
         public string AccountId => _account?.HomeAccountId.Identifier ?? string.Empty;
         public string UserName => _account?.Username ?? string.Empty;
+        public string TenantId { get; private set; } = string.Empty;
         public bool SessionOnly { get; private set; }
 
         public static async Task<Authentication> CreateAsync(ConnectionSettings settings, string configDirectory)
@@ -67,6 +69,7 @@ namespace SourceGit.AzureDevOps
         {
             var result = await _app.AcquireTokenInteractive(Scopes).WithUseEmbeddedWebView(false).WithPrompt(Prompt.SelectAccount).ExecuteAsync(cancellationToken).ConfigureAwait(false);
             _account = result.Account;
+            TenantId = result.TenantId;
         }
 
         public async Task<string> GetTokenAsync(CancellationToken cancellationToken)
@@ -76,6 +79,7 @@ namespace SourceGit.AzureDevOps
             try
             {
                 var result = await _app.AcquireTokenSilent(Scopes, _account).ExecuteAsync(cancellationToken).ConfigureAwait(false);
+                TenantId = result.TenantId;
                 return result.AccessToken;
             }
             catch (MsalUiRequiredException)
@@ -89,6 +93,7 @@ namespace SourceGit.AzureDevOps
             foreach (var account in await _app.GetAccountsAsync().ConfigureAwait(false))
                 await _app.RemoveAsync(account).ConfigureAwait(false);
             _account = null;
+            TenantId = string.Empty;
         }
 
         public void Dispose()
