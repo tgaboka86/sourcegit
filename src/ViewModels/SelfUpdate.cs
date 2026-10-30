@@ -4,6 +4,18 @@ namespace SourceGit.ViewModels
 {
     public class SelfUpdate : ObservableObject
     {
+        public bool IsBusy
+        {
+            get => _isBusy;
+            set => SetProperty(ref _isBusy, value);
+        }
+
+        public string Status
+        {
+            get => _status;
+            set => SetProperty(ref _status, value);
+        }
+
         public object Data
         {
             get => _data;
@@ -11,5 +23,7 @@ namespace SourceGit.ViewModels
         }
 
         private object _data = null;
+        private bool _isBusy;
+        private string _status;
     }
 }

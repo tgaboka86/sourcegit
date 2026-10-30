@@ -38,8 +38,8 @@
     </Grid>
 
     <!-- Body -->
-    <Grid Grid.Row="1">
-      <ContentControl Content="{Binding Data}">
+    <Grid Grid.Row="1" RowDefinitions="Auto,Auto,Auto">
+      <ContentControl Content="{Binding Data}" IsEnabled="{Binding !IsBusy}">
         <ContentControl.DataTemplates>
           <DataTemplate DataType="m:Version">
             <StackPanel Orientation="Vertical" Margin="16,8">
@@ -77,9 +77,13 @@
                         VerticalContentAlignment="Center">
                   <StackPanel Orientation="Horizontal">
                     <Path Width="12" Height="12" Data="{StaticResource Icons.Pull}" Fill="{DynamicResource AccentButtonForeground}"/>
-                    <TextBlock Text="{DynamicResource Text.SelfUpdate.GotoDownload}" Margin="8,0,0,0" Foreground="{DynamicResource AccentButtonForeground}"/>
+                    <TextBlock Text="{DynamicResource Text.SelfUpdate.OpenBrowser}" Margin="8,0,0,0" Foreground="{DynamicResource AccentButtonForeground}"/>
                   </StackPanel>
                 </Button>
+
+                <Button Classes="flat" Height="30" Margin="8,0,0,0"
+                        IsVisible="{Binding CanInstall}" Click="DownloadAndInstall"
+                        Content="{DynamicResource Text.SelfUpdate.Install}"/>
 
                 <Button Classes="flat"
                         Height="30"
@@ -93,6 +97,8 @@
                   </StackPanel>
                 </Button>
               </StackPanel>
+              <TextBlock IsVisible="{Binding !CanInstall}" MaxWidth="500" TextWrapping="Wrap" Margin="0,8,0,0"
+                         Text="{DynamicResource Text.SelfUpdate.BrowserOnly}"/>
             </StackPanel>
           </DataTemplate>
 
@@ -135,6 +141,12 @@
           </DataTemplate>
         </ContentControl.DataTemplates>
       </ContentControl>
+      <TextBlock Grid.Row="1" Text="{Binding Status}" MaxWidth="500" Margin="16,4,16,8" TextWrapping="Wrap"/>
+      <StackPanel Grid.Row="2" IsVisible="{Binding IsBusy}" Margin="16,0,16,12">
+        <ProgressBar IsIndeterminate="True" Height="4"/>
+        <Button Classes="flat" Content="{DynamicResource Text.Cancel}" Click="CloseWindow"
+                HorizontalAlignment="Center" Margin="0,8,0,0"/>
+      </StackPanel>
     </Grid>
   </Grid>
 </v:ChromelessWindow>
