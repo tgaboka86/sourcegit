@@ -12,6 +12,8 @@ Commit-default checks cover single and multiple commits, complete messages acros
 
 Picker checks cover recent-target ordering without duplicates, selection stability, real Git reflog records, named/unique creation targets and ambiguous fallbacks, partial-name searches without Enter, Graph descriptor resolution, direct row Add buttons, stale-search cancellation, permission feedback, and reviewer/Required persistence even when no PR is created. Native render output includes reviewer suggestions in both themes.
 
+Existing-PR checks cover discovery on opening and target changes, active drafts, separate targets, completed/abandoned PRs, stale responses, failed lookups and retries, and the final duplicate guard. They verify that discovery never writes to Azure DevOps and that a late duplicate still allows another target. Light/dark renders and native control checks cover the existing-PR notice, red errors, and green successful creation.
+
 Build into a separate output directory to avoid locking a running SourceGit installation:
 
 ```powershell

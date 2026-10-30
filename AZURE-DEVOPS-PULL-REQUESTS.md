@@ -60,7 +60,11 @@ Target choices, reviewer additions/removals, and their Required flags are rememb
 
 ## Recover from failures
 
-An existing active PR for the same source and target is opened rather than recreated. If creation succeeds but configuration fails, **Retry setup** uses the original PR ID and settings.
+As soon as the dialog has a source and target, it checks for an existing active PR for that exact pair. The check runs on opening with a suggested/remembered target and whenever the target changes. An active PR, including a draft, is shown beside the branch selectors with **Open existing PR**; creation for that pair is disabled. The target selector stays available, because the same source can have a separate PR into another target. Completed and abandoned PRs do not block a new one with further commits. **Check again** reloads the pair if the existing PR was closed elsewhere.
+
+Creation remains disabled while the early check is pending or failed. A final check before creation catches a matching PR opened elsewhere after the dialog loaded. It shows the same existing-PR notice without posting another PR. If creation succeeds but configuration fails, **Retry setup** uses the original PR ID and settings. Existing PR discovery never changes that PR's reviewers or completion settings and does not replace recovery for an uncertain prior creation attempt.
+
+Errors are red and verified successful creation is green, with colors adapted to the light and dark themes. Existing-PR notices and loading messages remain informational.
 
 If a response is lost, SourceGit records the uncertain attempt locally and will not repeat its POST automatically. **Check creation** searches for a matching result without modifying it. Inspect the PR or repository in Azure DevOps. After acknowledging that inspection, **Clear the recovery record** discards only the local recovery information; it does not delete or change a PR. A known PR whose configuration you prefer to complete in the browser can be handled the same way.
 

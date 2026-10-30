@@ -12,6 +12,11 @@
                     WindowStartupLocation="CenterOwner">
   <v:ChromelessWindow.Styles>
     <Style Selector="TextBox"><Setter Property="MinHeight" Value="28"/><Setter Property="Padding" Value="7,4"/><Setter Property="CornerRadius" Value="3"/></Style>
+    <Style Selector="TextBlock.pr-status"><Setter Property="Foreground" Value="{DynamicResource Brush.FG1}"/></Style>
+    <Style Selector="TextBlock.pr-status.success"><Setter Property="Foreground" Value="{DynamicResource Brush.CreatePR.Success}"/></Style>
+    <Style Selector="TextBlock.pr-status.error"><Setter Property="Foreground" Value="{DynamicResource Brush.CreatePR.Error}"/></Style>
+    <Style Selector="TextBlock.pr-search-status"><Setter Property="Foreground" Value="{DynamicResource Brush.FG2}"/></Style>
+    <Style Selector="TextBlock.pr-search-status.error"><Setter Property="Foreground" Value="{DynamicResource Brush.CreatePR.Error}"/></Style>
   </v:ChromelessWindow.Styles>
   <Grid RowDefinitions="Auto,*,Auto,Auto">
     <Grid Grid.Row="0" Height="30" IsVisible="{Binding !#ThisControl.UseSystemWindowFrame}">
@@ -59,7 +64,18 @@
             </ComboBox>
           </StackPanel>
         </Grid>
-        <StackPanel Spacing="10" IsEnabled="{Binding CanEdit}">
+        <Border x:Name="ExistingPullRequestNotice" IsVisible="{Binding HasExistingPullRequest}" BorderBrush="{DynamicResource Brush.Border1}" BorderThickness="1" CornerRadius="3" Padding="12">
+          <StackPanel Spacing="8">
+            <TextBlock Text="{Binding ExistingPullRequestMessage}" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding ExistingPullRequestTitle}" Classes="bold" TextWrapping="Wrap"/>
+            <TextBlock Text="{DynamicResource Text.CreatePR.ExistingPairHelp}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.FG2}"/>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button x:Name="OpenExistingPullRequest" Classes="flat primary" Content="{DynamicResource Text.CreatePR.OpenExisting}" Click="OnOpenExisting"/>
+              <Button Classes="flat" Content="{DynamicResource Text.CreatePR.CheckAgain}" Click="OnRetryLoading" IsEnabled="{Binding !HasActivity}"/>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+        <StackPanel x:Name="PullRequestForm" Spacing="10" IsEnabled="{Binding CanEditRequest}" IsVisible="{Binding !HasExistingPullRequest}">
           <StackPanel Spacing="4">
             <TextBlock Text="{DynamicResource Text.CreatePR.Subject}"/>
             <TextBox Text="{Binding Title, Mode=TwoWay}" MaxLength="400"/>
@@ -70,7 +86,7 @@
           </StackPanel>
           <TextBlock Text="{DynamicResource Text.CreatePR.Reviewers}"/>
           <TextBox x:Name="ReviewerSearchBox" Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Watermark="{DynamicResource Text.CreatePR.SearchReviewers}"/>
-          <TextBlock Text="{Binding ReviewerSearchStatus}" IsVisible="{Binding ReviewerSearchStatus.Length}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.FG2}"/>
+          <TextBlock x:Name="ReviewerSearchStatus" Text="{Binding ReviewerSearchStatus}" Classes="pr-search-status" Classes.error="{Binding HasReviewerSearchError}" IsVisible="{Binding ReviewerSearchStatus.Length}" TextWrapping="Wrap"/>
           <ScrollViewer IsVisible="{Binding SearchResults.Count}" MaxHeight="170" HorizontalScrollBarVisibility="Disabled">
             <ItemsControl x:Name="ReviewerSuggestions" ItemsSource="{Binding SearchResults}">
               <ItemsControl.ItemTemplate>
@@ -127,14 +143,14 @@
     </ScrollViewer>
     <StackPanel Grid.Row="2" Margin="22,4" Spacing="4">
       <ProgressBar IsIndeterminate="True" Height="3" IsVisible="{Binding HasActivity}"/>
-      <TextBlock Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap"/>
-      <SelectableTextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.FG2}"/>
+      <TextBlock x:Name="RequestStatus" Text="{Binding Status}" Classes="pr-status" Classes.success="{Binding IsSuccessful}" Classes.error="{Binding IsErrorStatus}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap"/>
+      <SelectableTextBlock x:Name="RequestError" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.CreatePR.Error}"/>
     </StackPanel>
     <WrapPanel Grid.Row="3" HorizontalAlignment="Right" Margin="18,8,18,14">
       <Button Classes="flat" Content="{DynamicResource Text.CreatePR.RetryConnection}" Click="OnRetryLoading" IsVisible="{Binding CanRetryLoading}" IsEnabled="{Binding !HasActivity}" Margin="4"/>
       <Button Classes="flat" Content="{DynamicResource Text.CreatePR.Open}" Click="OnOpenResult" IsVisible="{Binding HasResultLink}" Margin="4"/>
       <Button Classes="flat" Content="{DynamicResource Text.Close}" Click="OnClose" Margin="4"/>
-      <Button Classes="flat primary" Content="{Binding PrimaryLabel}" Click="OnCreate" IsEnabled="{Binding CanCreate}" IsVisible="{Binding !IsFinished}" Margin="4"/>
+      <Button x:Name="CreatePullRequestButton" Classes="flat primary" Content="{Binding PrimaryLabel}" Click="OnCreate" IsEnabled="{Binding CanCreate}" IsVisible="{Binding !IsFinished}" Margin="4"/>
     </WrapPanel>
   </Grid>
 </v:ChromelessWindow>

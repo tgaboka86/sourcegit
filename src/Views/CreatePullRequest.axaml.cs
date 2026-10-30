@@ -63,6 +63,7 @@ namespace SourceGit.Views
                 (DataContext as ViewModels.CreatePullRequest)?.RemoveReviewer(reviewer);
         }
         private void OnOpenResult(object sender, RoutedEventArgs e) { (DataContext as ViewModels.CreatePullRequest)?.OpenResult(); }
+        private void OnOpenExisting(object sender, RoutedEventArgs e) { (DataContext as ViewModels.CreatePullRequest)?.OpenExistingPullRequest(); }
         private void OnOpenRepository(object sender, RoutedEventArgs e) { (DataContext as ViewModels.CreatePullRequest)?.OpenRepository(); }
         private void OnClearRecovery(object sender, RoutedEventArgs e) { (DataContext as ViewModels.CreatePullRequest)?.ClearRecovery(); }
         private void OnClose(object sender, RoutedEventArgs e) { Close(); }

@@ -31,6 +31,7 @@ namespace SourceGit.ViewModels
         public ObservableCollection<PullRequestReviewer> Reviewers { get; } = [];
         public string ReviewerSearchStatus { get => _reviewerSearchStatus; private set => SetProperty(ref _reviewerSearchStatus, value); }
         public bool IsSearchingReviewers { get => _searchingReviewers; private set => SetProperty(ref _searchingReviewers, value); }
+        public bool HasReviewerSearchError { get => _reviewerSearchError; private set => SetProperty(ref _reviewerSearchError, value); }
         public string SourceBranch { get; }
         public string RepositoryLabel { get => _repositoryLabel; private set => SetProperty(ref _repositoryLabel, value); }
         public string ClientId { get => _clientId; set => SetProperty(ref _clientId, value); }
@@ -69,18 +70,25 @@ namespace SourceGit.ViewModels
         public bool IsLoadingCommits { get => _loadingCommits; private set { SetProperty(ref _loadingCommits, value); NotifyState(); } }
         public bool HasActivity => IsBusy || IsLoadingCommits;
         public bool CanEdit => IsConnected && !IsBusy && !IsFinished && _store?.Pending == null;
+        public bool CanEditRequest => CanEdit && !HasExistingPullRequest;
         public bool IsFinished { get => _finished; private set { SetProperty(ref _finished, value); NotifyState(); } }
         public string Status { get => _status; private set { SetProperty(ref _status, value); OnPropertyChanged(nameof(HasStatus)); } }
-        public string Error { get => _error; private set { SetProperty(ref _error, value); OnPropertyChanged(nameof(HasError)); } }
+        public string Error { get => _error; private set { SetProperty(ref _error, value); OnPropertyChanged(nameof(HasError)); OnPropertyChanged(nameof(IsErrorStatus)); } }
         public bool HasStatus => !string.IsNullOrEmpty(Status);
         public bool HasError => !string.IsNullOrEmpty(Error);
+        public bool IsSuccessful => IsFinished && _result?.State == CreationState.Created;
+        public bool IsErrorStatus => HasError && !IsSuccessful;
+        public bool HasExistingPullRequest => _existingPullRequest != null;
+        public string ExistingPullRequestMessage => _existingPullRequest == null ? string.Empty :
+            App.Text(_existingPullRequest.IsDraft ? "CreatePR.ExistingDraftPair" : "CreatePR.ExistingPair", _existingPullRequest.PullRequestId);
+        public string ExistingPullRequestTitle => _existingPullRequest?.Title ?? string.Empty;
         public bool HasResultLink => _result?.PullRequest?.PullRequestId > 0;
         public bool HasPending => _store?.Pending != null;
         public bool HasUnknown => _store?.Pending is { PullRequestId: 0 };
         public bool RecoveryAcknowledged { get => _recoveryAcknowledged; set { SetProperty(ref _recoveryAcknowledged, value); NotifyState(); } }
         public bool CanClearRecovery => !IsBusy && HasPending && RecoveryAcknowledged;
         public string PrimaryLabel => HasPending ? App.Text(_store.Pending.PullRequestId > 0 ? "CreatePR.RetrySetup" : "CreatePR.CheckCreation") : App.Text(IsDraft ? "CreatePR.CreateDraft" : "CreatePR.Create");
-        public bool CanCreate => IsConnected && !HasActivity && !IsFinished && (HasPending || (!_commitLoadFailed && Target != null && !string.IsNullOrWhiteSpace(Title) && Reviewers.All(x => x.IsAvailable)));
+        public bool CanCreate => IsConnected && !HasActivity && !IsFinished && (HasPending || (!HasExistingPullRequest && !_commitLoadFailed && Target != null && !string.IsNullOrWhiteSpace(Title) && Reviewers.All(x => x.IsAvailable)));
         public bool AutoCompleteAvailable => !IsDraft;
         public bool IsSquash => MergeStrategy == 0;
         public string[] MergeStrategies { get; } = [App.Text("CreatePR.Squash"), App.Text("CreatePR.Rebase"), App.Text("CreatePR.Merge")];
@@ -168,6 +176,7 @@ namespace SourceGit.ViewModels
             IsSignedIn = false;
             AccountName = string.Empty;
             _result = null;
+            _existingPullRequest = null;
             IsFinished = false;
             _store = null;
             _preferenceKey = null;
@@ -176,6 +185,7 @@ namespace SourceGit.ViewModels
             Branches.Clear();
             SearchResults.Clear();
             ReviewerSearchStatus = string.Empty;
+            HasReviewerSearchError = false;
             IsSearchingReviewers = false;
             _searchCancellation?.Cancel();
             _commitCancellation?.Cancel();
@@ -360,7 +370,7 @@ namespace SourceGit.ViewModels
 
         private void RememberReviewers()
         {
-            if (!CanEdit || _preferenceKey == null)
+            if (!CanEditRequest || _preferenceKey == null)
                 return;
             var defaults = CopyDefaults();
             defaults.Reviewers = Reviewers.Select(x => new ReviewerSelection { Id = x.Id, IsRequired = x.IsRequired }).ToList();
@@ -374,6 +384,8 @@ namespace SourceGit.ViewModels
             _commitCancellation?.Cancel();
             _commitCancellation = null;
             _commitLoadFailed = false;
+            _existingPullRequest = null;
+            NotifyState();
             if (_disposed || !IsConnected || HasPending)
             {
                 IsLoadingCommits = false;
@@ -392,6 +404,14 @@ namespace SourceGit.ViewModels
                     return;
                 }
                 Error = string.Empty;
+                Status = App.Text("CreatePR.CheckingExisting");
+                var existing = await _client.FindPullRequestsAsync(_sourceRef, target.Name, true, cancellation.Token);
+                cancellation.Token.ThrowIfCancellationRequested();
+                if (existing.Count > 0)
+                {
+                    ShowExistingPullRequest(existing[0]);
+                    return;
+                }
                 Status = App.Text("CreatePR.LoadingCommits");
                 var sourceTip = await _service.ValidateSourceAsync(_sourceRef, cancellation.Token);
                 var targetRef = await _client.GetRefAsync(target.Name, cancellation.Token) ?? throw new ServiceException("InvalidTarget");
@@ -444,6 +464,26 @@ namespace SourceGit.ViewModels
             finally { _updatingCommitText = false; }
         }
 
+        private void ShowExistingPullRequest(PullRequest pullRequest)
+        {
+            if (pullRequest.PullRequestId <= 0)
+                throw new ServiceException("InvalidResponse");
+            _existingPullRequest = pullRequest;
+            _searchCancellation?.Cancel();
+            SearchResults.Clear();
+            ReviewerSearchStatus = string.Empty;
+            HasReviewerSearchError = false;
+            Status = string.Empty;
+            Error = string.Empty;
+            NotifyState();
+        }
+
+        public void OpenExistingPullRequest()
+        {
+            if (HasExistingPullRequest)
+                Native.OS.OpenBrowser(_client.PullRequestUrl(_existingPullRequest.PullRequestId));
+        }
+
         public Task SignOutAsync() => RunAsync(async () =>
         {
             if (_auth != null)
@@ -462,7 +502,7 @@ namespace SourceGit.ViewModels
 
         public void AddReviewer(Identity identity)
         {
-            if (!CanEdit || identity == null || !identity.IsActive || !Guid.TryParse(identity.Id, out _) || Reviewers.Any(x => x.Id.Equals(identity.Id, StringComparison.OrdinalIgnoreCase)))
+            if (!CanEditRequest || identity == null || !identity.IsActive || !Guid.TryParse(identity.Id, out _) || Reviewers.Any(x => x.Id.Equals(identity.Id, StringComparison.OrdinalIgnoreCase)))
                 return;
             Reviewers.Add(new PullRequestReviewer(RememberReviewers) { Id = identity.Id, Name = identity.Label, Detail = identity.Detail });
             RememberReviewers();
@@ -472,7 +512,7 @@ namespace SourceGit.ViewModels
 
         public void RemoveReviewer(PullRequestReviewer reviewer)
         {
-            if (CanEdit)
+            if (CanEditRequest)
             {
                 Reviewers.Remove(reviewer);
                 RememberReviewers();
@@ -482,7 +522,7 @@ namespace SourceGit.ViewModels
 
         public Task SubmitAsync() => RunAsync(async () =>
         {
-            if (!IsConnected || IsFinished || IsLoadingCommits || (_commitLoadFailed && !HasPending))
+            if (!IsConnected || IsFinished || IsLoadingCommits || ((HasExistingPullRequest || _commitLoadFailed) && !HasPending))
                 return;
             Status = App.Text(HasPending ? "CreatePR.Checking" : "CreatePR.Creating");
             if (HasPending)
@@ -505,6 +545,13 @@ namespace SourceGit.ViewModels
                     DeleteSourceBranch = DeleteSourceBranch,
                     MergeCommitMessage = IsSquash ? MergeMessage : null,
                 }, AutoComplete, _lifetime.Token);
+            }
+
+            if (_result is { State: CreationState.Existing, PullRequest.Status: "active" } && !HasPending)
+            {
+                ShowExistingPullRequest(_result.PullRequest);
+                _result = null;
+                return;
             }
 
             Status = App.Text("CreatePR.Result." + _result.State);
@@ -554,6 +601,7 @@ namespace SourceGit.ViewModels
                 Status = string.Empty;
                 Error = string.Empty;
                 NotifyState();
+                _ = LoadCommitTextAsync();
             }
             catch (Exception ex) { ShowError(ex); }
         }
@@ -564,8 +612,9 @@ namespace SourceGit.ViewModels
             _searchCancellation = null;
             IsSearchingReviewers = false;
             ReviewerSearchStatus = string.Empty;
+            HasReviewerSearchError = false;
             SearchResults.Clear();
-            if (_disposed || !CanEdit || string.IsNullOrWhiteSpace(text) || text.Trim().Length < 2)
+            if (_disposed || !CanEditRequest || string.IsNullOrWhiteSpace(text) || text.Trim().Length < 2)
                 return;
             using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
             _searchCancellation = cancellation;
@@ -576,7 +625,7 @@ namespace SourceGit.ViewModels
                 await Task.Delay(250, cancellation.Token);
                 var identities = await _client.SearchIdentitiesAsync(text.Trim(), cancellation.Token);
                 cancellation.Token.ThrowIfCancellationRequested();
-                if (!CanEdit)
+                if (!CanEditRequest)
                     return;
                 foreach (var identity in identities.Where(x => !Reviewers.Any(y => string.Equals(y.Id, x.Id, StringComparison.OrdinalIgnoreCase))))
                     SearchResults.Add(identity);
@@ -586,7 +635,10 @@ namespace SourceGit.ViewModels
             catch (Exception ex)
             {
                 if (!_disposed && !cancellation.IsCancellationRequested)
+                {
+                    HasReviewerSearchError = true;
                     ReviewerSearchStatus = App.Text("CreatePR.Error." + (ex is ServiceException service ? service.Code : "Connection"));
+                }
             }
             finally
             {
@@ -650,6 +702,12 @@ namespace SourceGit.ViewModels
         {
             OnPropertyChanged(nameof(CanCreate));
             OnPropertyChanged(nameof(CanEdit));
+            OnPropertyChanged(nameof(CanEditRequest));
+            OnPropertyChanged(nameof(HasExistingPullRequest));
+            OnPropertyChanged(nameof(ExistingPullRequestMessage));
+            OnPropertyChanged(nameof(ExistingPullRequestTitle));
+            OnPropertyChanged(nameof(IsSuccessful));
+            OnPropertyChanged(nameof(IsErrorStatus));
             OnPropertyChanged(nameof(HasPending));
             OnPropertyChanged(nameof(HasUnknown));
             OnPropertyChanged(nameof(HasResultLink));
@@ -694,6 +752,7 @@ namespace SourceGit.ViewModels
         private RepositoryCreationStore _store;
         private CreationService _service;
         private CreationResult _result;
+        private PullRequest _existingPullRequest;
         private string _preferenceKey;
         private string _repositoryLabel;
         private string _clientId;
@@ -710,6 +769,7 @@ namespace SourceGit.ViewModels
         private string _reviewerSearchStatus = string.Empty;
         private GitRef _target;
         private bool _searchingReviewers;
+        private bool _reviewerSearchError;
         private bool _connectionExpanded;
         private bool _sessionOnly;
         private bool _connected;

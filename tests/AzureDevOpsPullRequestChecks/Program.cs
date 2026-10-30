@@ -60,6 +60,7 @@ internal static class Program
             CheckCommitDefaults(fixture);
             CheckReviewerSuggestionsAndTargets(fixture, args.Contains("--render"));
             CheckBranchOrigins(fixture);
+            CheckExistingPullRequests(fixture, args.Contains("--render"));
         }
         finally
         {
@@ -341,7 +342,7 @@ internal static class Program
         var initialize = restored.InitializeAsync();
         PumpUntil(() => initialize.IsCompleted);
         Check(restored.Target?.Name == Target && restored.AutoComplete && restored.DeleteSourceBranch && restored.Reviewers.Single().IsRequired, "restore last successful options");
-        Check(!restored.IsDraft && restored.Title == "Improve widget selection" && restored.Description.Length == 0, "PR-specific fields are fresh");
+        Check(!restored.IsDraft && restored.HasExistingPullRequest && !restored.CanCreate, "reopening detects the existing PR before offering creation");
         restored.DeleteSourceBranch = false;
         restored.Dispose();
         var saved = repo.Settings.AzureDevOpsPullRequests.Values.Single();
@@ -594,6 +595,126 @@ internal static class Program
         using (var deleted = Open()) Check(deleted.Target?.BranchName == "release", "deleted origin branch does not cause a guessed target");
     }
 
+    private static void CheckExistingPullRequests(string fixture, bool render)
+    {
+        const string release = "refs/heads/release";
+        var repo = new Repository(false, fixture, Path.Combine(fixture, ".git"));
+        var server = new FakeServer { SourceMissing = true };
+        server.OtherBranches.Add(new() { Name = release, ObjectId = new('d', 40) });
+        PullRequest Existing(string target, bool draft = false) => new()
+        {
+            PullRequestId = 23, Title = "Existing widget improvement", SourceRefName = Source, TargetRefName = target, Status = "active", IsDraft = draft,
+        };
+        server.Current = Existing(Target, true);
+        using var model = new CreatePullRequest(repo, new() { Name = "origin", URL = Address.WebUrl },
+            new() { Name = "feature/widgets", Remote = "origin", FullName = "refs/remotes/origin/feature/widgets" },
+            http: new HttpClient(server), authenticationFactory: (_, _) => Task.FromResult<IAuthentication>(new FakeAuthentication("existing-pr-account")),
+            branchOriginReader: _ => Task.FromResult(new SourceGit.Commands.PullRequestBranchOrigin("main", new('c', 40))));
+        var window = new SourceGit.Views.CreatePullRequest { DataContext = model, ShowInTaskbar = false, ShowActivated = false };
+        window.Show();
+        PumpUntil(() => !model.HasActivity);
+        Check(model.HasExistingPullRequest && !model.CanCreate && !model.HasError && !model.IsFinished, "opening detects an existing active draft as information, without a creation attempt");
+        Check(model.ExistingPullRequestMessage.Contains("Draft") && model.ExistingPullRequestMessage.Contains("23"), "existing notice identifies the draft PR");
+        Check(window.FindControl<Border>("ExistingPullRequestNotice").IsVisible && !window.FindControl<StackPanel>("PullRequestForm").IsVisible, "existing notice replaces the new-PR form");
+        Check(window.FindControl<ComboBox>("TargetBranch").IsEnabled && !window.FindControl<Button>("CreatePullRequestButton").IsEnabled, "existing pair disables creation but keeps the target selector available");
+        Check(window.FindControl<Button>("OpenExistingPullRequest").IsVisible && server.CommitPages == 0, "existing PR can be opened without loading unrelated creation defaults");
+        var submit = model.SubmitAsync();
+        PumpUntil(() => submit.IsCompleted);
+        Check(server.Posts == 0 && server.Patches == 0 && server.ReviewerWrites == 0, "existing pair cannot dispatch creation or modify the existing PR");
+        RenderState("existing-pr", false, false);
+        server.SourceMissing = false;
+        var main = model.Branches.Single(x => x.Name == Target);
+        var other = model.Branches.Single(x => x.Name == release);
+        model.Target = other;
+        PumpUntil(() => !model.HasActivity);
+        Check(!model.HasExistingPullRequest && model.CanCreate, "same source with a different target can create a separate PR");
+        model.Title = "Keep this manual title";
+        model.Description = "Keep this manual description";
+        model.Target = main;
+        PumpUntil(() => !model.HasActivity);
+        model.Target = other;
+        PumpUntil(() => !model.HasActivity);
+        Check(model.Title == "Keep this manual title" && model.Description == "Keep this manual description", "switching through an existing pair preserves manual text for another target");
+        server.Current.Status = "completed";
+        model.Target = main;
+        PumpUntil(() => !model.HasActivity);
+        Check(model.CanCreate && !model.HasExistingPullRequest, "completed PR does not block a new PR with further commits");
+        server.Current.Status = "abandoned";
+        var reload = model.RetryLoadingAsync();
+        PumpUntil(() => reload.IsCompleted);
+        Check(model.CanCreate, "abandoned PR does not block creation");
+        server.Current = Existing(Target);
+        reload = model.RetryLoadingAsync();
+        PumpUntil(() => reload.IsCompleted);
+        Check(model.HasExistingPullRequest, "check-again detects a new active PR");
+        server.Current.Status = "abandoned";
+        reload = model.RetryLoadingAsync();
+        PumpUntil(() => reload.IsCompleted);
+        Check(!model.HasExistingPullRequest && model.CanCreate, "check-again releases the block when the existing PR is closed");
+        server.Current = Existing(Target);
+        var gate = new TaskCompletionSource();
+        server.PullRequestGates[Target] = gate.Task;
+        model.Target = other;
+        PumpUntil(() => !model.HasActivity);
+        model.Target = main;
+        Check(model.IsLoadingCommits && !model.CanCreate, "creation is disabled while the pair check is pending");
+        model.Target = other;
+        PumpUntil(() => !model.HasActivity);
+        var completed = server.CompletedPullRequestLookups;
+        gate.SetResult();
+        PumpUntil(() => server.CompletedPullRequestLookups > completed);
+        Check(model.Target == other && !model.HasExistingPullRequest && model.CanCreate, "late response for an old target cannot block the new target");
+        server.PullRequestGates.Clear();
+        server.PullRequestLookupError = HttpStatusCode.Forbidden;
+        reload = model.RetryLoadingAsync();
+        PumpUntil(() => reload.IsCompleted);
+        Check(model.HasError && model.IsErrorStatus && !model.CanCreate && model.CanRetryLoading, "lookup failure blocks creation until a successful retry");
+        RenderState("existing-pr-error", true, false);
+        server.PullRequestLookupError = null;
+        server.Current = null;
+        reload = model.RetryLoadingAsync();
+        PumpUntil(() => reload.IsCompleted);
+        server.Current = Existing(release);
+        submit = model.SubmitAsync();
+        PumpUntil(() => submit.IsCompleted);
+        Check(model.HasExistingPullRequest && !model.IsFinished && model.CanEdit && !model.HasError && server.Posts == 0, "final guard catches a PR created elsewhere after the initial check and allows choosing another target");
+        server.Current = null;
+        reload = model.RetryLoadingAsync();
+        PumpUntil(() => reload.IsCompleted);
+        submit = model.SubmitAsync();
+        PumpUntil(() => submit.IsCompleted);
+        Check(model.IsSuccessful && !model.HasError && server.Posts == 1, "fresh pair can still create and verify a PR successfully");
+        RenderState("create-pr-success", false, true);
+        window.Close();
+
+        void RenderState(string name, bool error, bool success)
+        {
+            foreach (var theme in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+            {
+                App.Current.RequestedThemeVariant = theme;
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                if (error)
+                {
+                    var errorColor = ((Avalonia.Media.ISolidColorBrush)window.FindControl<SelectableTextBlock>("RequestError").Foreground).Color;
+                    var statusColor = ((Avalonia.Media.ISolidColorBrush)window.FindControl<TextBlock>("RequestStatus").Foreground).Color;
+                    Check(errorColor.R > errorColor.G && errorColor.R > errorColor.B && statusColor == errorColor, "error and failure-status text are red in " + theme.Key);
+                }
+                if (success)
+                {
+                    var color = ((Avalonia.Media.ISolidColorBrush)window.FindControl<TextBlock>("RequestStatus").Foreground).Color;
+                    Check(color.G > color.R && color.G > color.B, "success status is green in " + theme.Key);
+                }
+                if (render)
+                {
+                    using var bitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height), new Vector(96, 96));
+                    bitmap.Render(window);
+                    bitmap.Save(Path.Combine(AppContext.BaseDirectory, name + "-" + theme.Key + ".png"));
+                }
+            }
+        }
+    }
+
     private static async Task CheckPersonalAccessTokenAsync()
     {
         const string token = "synthetic-pat-for-checks";
@@ -795,6 +916,9 @@ internal static class Program
         public bool SuppressedAuthRedirects;
         public int Posts, Patches, ReviewerWrites;
         public PullRequest Current;
+        public Dictionary<string, Task> PullRequestGates { get; } = [];
+        public HttpStatusCode? PullRequestLookupError;
+        public int CompletedPullRequestLookups;
         public CreateRequest LastCreate;
         public static Identity Reviewer() => new() { Id = ReviewerId, ProviderDisplayName = "Example reviewer", DisplayName = "Example reviewer", UniqueName = "reviewer@example.invalid", IsActive = true };
 
@@ -887,7 +1011,13 @@ internal static class Program
                 return Json(Current, ApiJsonContext.Default.PullRequest);
             }
             if (path.EndsWith("/pullrequests"))
-                return Json(new ListResult<PullRequest> { Value = Current == null ? [] : [Current] }, ApiJsonContext.Default.ListResultPullRequest);
+            {
+                if (PullRequestLookupError is { } failure) return new(failure);
+                var response = Json(new ListResult<PullRequest> { Value = Current == null ? [] : [Current] }, ApiJsonContext.Default.ListResultPullRequest);
+                if (PullRequestGates.TryGetValue(query["searchCriteria.targetRefName"], out var gate)) await gate;
+                CompletedPullRequestLookups++;
+                return response;
+            }
             if (path.EndsWith("/pullrequests/17"))
                 return Json(Current, ApiJsonContext.Default.PullRequest);
             if (RepositoryError is { } errorStatus)

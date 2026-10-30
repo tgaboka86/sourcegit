@@ -77,6 +77,12 @@
   <x:String x:Key="Text.CreatePR.RetryConnection">Retry loading</x:String>
   <x:String x:Key="Text.CreatePR.HttpStatus">HTTP {0}.</x:String>
   <x:String x:Key="Text.CreatePR.LoadingCommits">Loading commit messages…</x:String>
+  <x:String x:Key="Text.CreatePR.CheckingExisting">Checking for an existing pull request…</x:String>
+  <x:String x:Key="Text.CreatePR.ExistingPair">Pull request #{0} already exists for this source and target.</x:String>
+  <x:String x:Key="Text.CreatePR.ExistingDraftPair">Draft pull request #{0} already exists for this source and target.</x:String>
+  <x:String x:Key="Text.CreatePR.ExistingPairHelp">Open it to continue, or select a different target branch to create a separate PR.</x:String>
+  <x:String x:Key="Text.CreatePR.OpenExisting">Open existing PR</x:String>
+  <x:String x:Key="Text.CreatePR.CheckAgain">Check again</x:String>
   <x:String x:Key="Text.CreatePR.Error.NoCommits">There are no source commits to include for this target branch.</x:String>
   <x:String x:Key="Text.CreatePR.UnavailableReviewer">Unavailable reviewer — remove or replace this selection</x:String>
   <x:String x:Key="Text.CreatePR.PendingNotice">A previous creation attempt needs checking. Its original settings will be used for recovery.</x:String>
