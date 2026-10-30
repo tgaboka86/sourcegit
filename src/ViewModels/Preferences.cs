@@ -141,6 +141,12 @@ namespace SourceGit.ViewModels
             set => SetProperty(ref _refreshThrottling, Math.Clamp(value, 0, 5000));
         }
 
+        public bool ManualRefresh
+        {
+            get => _manualRefresh;
+            set => SetProperty(ref _manualRefresh, value);
+        }
+
         public int SubjectGuideLength
         {
             get => _subjectGuideLength;
@@ -838,6 +844,7 @@ namespace SourceGit.ViewModels
 
         private int _maxHistoryCommits = 20000;
         private int _refreshThrottling = 1000;
+        private bool _manualRefresh = false;
         private int _subjectGuideLength = 50;
         private int _workingDirectoryHeadMode = 2;
         private bool _useFixedTabWidth = true;
