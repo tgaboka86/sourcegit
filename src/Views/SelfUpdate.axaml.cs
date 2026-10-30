@@ -76,7 +76,7 @@ namespace SourceGit.Views
             Close();
         }
 
-        private void GotoDownload(object sender, RoutedEventArgs e)
+        private void OpenReleaseInBrowser(object sender, RoutedEventArgs e)
         {
             if (sender is Button { DataContext: Models.Version ver })
                 Native.OS.OpenBrowser(ver.ReleaseUrl);
