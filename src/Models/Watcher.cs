@@ -18,7 +18,9 @@ namespace SourceGit.Models
 
             public void Dispose()
             {
-                Interlocked.Decrement(ref _target._lockCount);
+                var target = Interlocked.Exchange(ref _target, null);
+                if (target != null)
+                    Interlocked.Decrement(ref target._lockCount);
             }
 
             private Watcher _target;
@@ -83,14 +85,20 @@ namespace SourceGit.Models
             // Starts filesystem watchers in another thread to avoid UI blocking
             Task.Run(() =>
             {
-                try
+                lock (_syncRoot)
                 {
-                    foreach (var watcher in _watchers)
-                        watcher.EnableRaisingEvents = true;
-                }
-                catch
-                {
-                    // Ignore exceptions. This may occur while `Dispose` is called.
+                    if (_disposed)
+                        return;
+
+                    try
+                    {
+                        foreach (var watcher in _watchers)
+                            watcher.EnableRaisingEvents = true;
+                    }
+                    catch
+                    {
+                        OnWatcherError(this, new ErrorEventArgs(new IOException("Failed to start filesystem watcher.")));
+                    }
                 }
             });
         }
@@ -128,108 +136,141 @@ namespace SourceGit.Models
 
         public void Dispose()
         {
-            foreach (var watcher in _watchers)
+            lock (_syncRoot)
             {
-                watcher.EnableRaisingEvents = false;
-                watcher.Dispose();
-            }
+                if (_disposed)
+                    return;
 
-            _watchers.Clear();
-            _timer.Dispose();
-            _timer = null;
+                _disposed = true;
+                _timer.Dispose();
+                foreach (var watcher in _watchers)
+                    watcher.Dispose();
+                _watchers.Clear();
+            }
         }
 
         private void Tick(object sender)
         {
-            if (Interlocked.Read(ref _lockCount) > 0)
-                return;
-
-            var now = DateTime.Now.ToFileTime();
-            var refreshCommits = false;
-            var refreshSubmodules = false;
-            var refreshWC = false;
-
-            var oldUpdateBranch = Interlocked.Exchange(ref _updateBranch, -1);
-            if (oldUpdateBranch > 0)
+            lock (_syncRoot)
             {
-                if (now > oldUpdateBranch)
-                {
-                    refreshCommits = true;
-                    refreshSubmodules = _repo.MayHaveSubmodules();
-                    refreshWC = true;
+                if (_disposed || Interlocked.Read(ref _lockCount) > 0)
+                    return;
 
-                    _repo.RefreshBranches();
-                    _repo.RefreshWorktrees();
-                }
-                else
+                if (_recovery.IsPending)
                 {
-                    Interlocked.CompareExchange(ref _updateBranch, oldUpdateBranch, -1);
-                }
-            }
-
-            if (refreshWC)
-            {
-                Interlocked.Exchange(ref _updateWC, -1);
-                _repo.RefreshWorkingCopyChanges();
-            }
-            else
-            {
-                var oldUpdateWC = Interlocked.Exchange(ref _updateWC, -1);
-                if (oldUpdateWC > 0)
-                {
-                    if (now > oldUpdateWC)
+                    if (_recovery.TryTake(Environment.TickCount64))
+                    {
+                        // Clear old deadlines before dispatching. Events arriving during
+                        // these refreshes remain pending for the next pass.
+                        Interlocked.Exchange(ref _updateBranch, -1);
+                        Interlocked.Exchange(ref _updateTags, -1);
+                        Interlocked.Exchange(ref _updateStashes, -1);
+                        Interlocked.Exchange(ref _updateWC, -1);
+                        Interlocked.Exchange(ref _updateSubmodules, -1);
+                        _repo.RefreshBranches();
+                        _repo.RefreshWorktrees();
+                        _repo.RefreshTags();
+                        _repo.RefreshStashes();
                         _repo.RefreshWorkingCopyChanges();
-                    else
-                        Interlocked.CompareExchange(ref _updateWC, oldUpdateWC, -1);
-                }
-            }
-
-            if (refreshSubmodules)
-            {
-                Interlocked.Exchange(ref _updateSubmodules, -1);
-                _repo.RefreshSubmodules();
-            }
-            else
-            {
-                var oldUpdateSubmodule = Interlocked.Exchange(ref _updateSubmodules, -1);
-                if (oldUpdateSubmodule > 0)
-                {
-                    if (now > oldUpdateSubmodule)
+                        // Also clear removed submodules after an overflow.
                         _repo.RefreshSubmodules();
+                        _repo.RefreshCommits();
+                    }
+
+                    return;
+                }
+
+                var now = DateTime.Now.ToFileTime();
+                var refreshCommits = false;
+                var refreshSubmodules = false;
+                var refreshWC = false;
+
+                var oldUpdateBranch = Interlocked.Exchange(ref _updateBranch, -1);
+                if (oldUpdateBranch > 0)
+                {
+                    if (now > oldUpdateBranch)
+                    {
+                        refreshCommits = true;
+                        refreshSubmodules = _repo.MayHaveSubmodules();
+                        refreshWC = true;
+
+                        _repo.RefreshBranches();
+                        _repo.RefreshWorktrees();
+                    }
                     else
-                        Interlocked.CompareExchange(ref _updateSubmodules, oldUpdateSubmodule, -1);
+                    {
+                        Interlocked.CompareExchange(ref _updateBranch, oldUpdateBranch, -1);
+                    }
                 }
-            }
 
-            var oldUpdateStashes = Interlocked.Exchange(ref _updateStashes, -1);
-            if (oldUpdateStashes > 0)
-            {
-                if (now > oldUpdateStashes)
-                    _repo.RefreshStashes();
-                else
-                    Interlocked.CompareExchange(ref _updateStashes, oldUpdateStashes, -1);
-            }
-
-            var oldUpdateTags = Interlocked.Exchange(ref _updateTags, -1);
-            if (oldUpdateTags > 0)
-            {
-                if (now > oldUpdateTags)
+                if (refreshWC)
                 {
-                    refreshCommits = true;
-                    _repo.RefreshTags();
+                    Interlocked.Exchange(ref _updateWC, -1);
+                    _repo.RefreshWorkingCopyChanges();
                 }
                 else
                 {
-                    Interlocked.CompareExchange(ref _updateTags, oldUpdateTags, -1);
+                    var oldUpdateWC = Interlocked.Exchange(ref _updateWC, -1);
+                    if (oldUpdateWC > 0)
+                    {
+                        if (now > oldUpdateWC)
+                            _repo.RefreshWorkingCopyChanges();
+                        else
+                            Interlocked.CompareExchange(ref _updateWC, oldUpdateWC, -1);
+                    }
                 }
-            }
 
-            if (refreshCommits)
-                _repo.RefreshCommits();
+                if (refreshSubmodules)
+                {
+                    Interlocked.Exchange(ref _updateSubmodules, -1);
+                    _repo.RefreshSubmodules();
+                }
+                else
+                {
+                    var oldUpdateSubmodule = Interlocked.Exchange(ref _updateSubmodules, -1);
+                    if (oldUpdateSubmodule > 0)
+                    {
+                        if (now > oldUpdateSubmodule)
+                            _repo.RefreshSubmodules();
+                        else
+                            Interlocked.CompareExchange(ref _updateSubmodules, oldUpdateSubmodule, -1);
+                    }
+                }
+
+                var oldUpdateStashes = Interlocked.Exchange(ref _updateStashes, -1);
+                if (oldUpdateStashes > 0)
+                {
+                    if (now > oldUpdateStashes)
+                        _repo.RefreshStashes();
+                    else
+                        Interlocked.CompareExchange(ref _updateStashes, oldUpdateStashes, -1);
+                }
+
+                var oldUpdateTags = Interlocked.Exchange(ref _updateTags, -1);
+                if (oldUpdateTags > 0)
+                {
+                    if (now > oldUpdateTags)
+                    {
+                        refreshCommits = true;
+                        _repo.RefreshTags();
+                    }
+                    else
+                    {
+                        Interlocked.CompareExchange(ref _updateTags, oldUpdateTags, -1);
+                    }
+                }
+
+                if (refreshCommits)
+                    _repo.RefreshCommits();
+            }
         }
 
         private void OnRepositoryChanged(object o, FileSystemEventArgs e)
         {
+            if (_disposed)
+                return;
+
+            _recovery.RecordActivity(Environment.TickCount64);
             if (string.IsNullOrEmpty(e.Name) || e.Name.Equals(".git", StringComparison.Ordinal))
                 return;
 
@@ -245,21 +286,21 @@ namespace SourceGit.Models
 
         /// <summary>
         ///     The internal buffer overflowed (a large fetch or checkout writes thousands of files), so
-        ///     some events were dropped and we cannot know which. Reload everything once things settle.
+        ///     some events were dropped and we cannot know which. Coalesce recovery requests
+        ///     until things settle, with a bounded delay during continuous activity.
         /// </summary>
         private void OnWatcherError(object o, ErrorEventArgs e)
         {
-            var desired = DateTime.Now.AddSeconds(1).ToFileTime();
-            Interlocked.Exchange(ref _updateBranch, desired);
-            Interlocked.Exchange(ref _updateTags, desired);
-            Interlocked.Exchange(ref _updateStashes, desired);
-            Interlocked.Exchange(ref _updateWC, desired);
-            if (_repo.MayHaveSubmodules())
-                Interlocked.Exchange(ref _updateSubmodules, desired);
+            if (!_disposed)
+                _recovery.Schedule(Environment.TickCount64);
         }
 
         private void OnGitDirChanged(object o, FileSystemEventArgs e)
         {
+            if (_disposed)
+                return;
+
+            _recovery.RecordActivity(Environment.TickCount64);
             if (string.IsNullOrEmpty(e.Name))
                 return;
 
@@ -269,6 +310,10 @@ namespace SourceGit.Models
 
         private void OnWorkingCopyChanged(object o, FileSystemEventArgs e)
         {
+            if (_disposed)
+                return;
+
+            _recovery.RecordActivity(Environment.TickCount64);
             if (string.IsNullOrEmpty(e.Name))
                 return;
 
@@ -375,6 +420,9 @@ namespace SourceGit.Models
             return IsInSubmodule(Path.GetDirectoryName(folder));
         }
 
+        private readonly object _syncRoot = new();
+        private readonly WatcherRecovery _recovery = new();
+        private volatile bool _disposed;
         private readonly IRepository _repo;
         private readonly string _root;
         private List<FileSystemWatcher> _watchers;

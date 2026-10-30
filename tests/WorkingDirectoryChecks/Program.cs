@@ -524,11 +524,8 @@ internal static class Program
         // These checks supply synthetic status snapshots; keep the live watcher
         // from replacing them with the fixture's actual files during UI pumping.
         using var watcherLock = repo.LockWatcher();
-        // The lock prevents new watcher ticks, but an earlier status query may still finish.
-        var refresh = (CancellationTokenSource)typeof(Repository)
-            .GetField("_cancellationRefreshWorkingCopyChanges", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-            .GetValue(repo);
-        refresh?.Cancel();
+        // Let refreshes already running when the watcher was locked finish first.
+        PumpUntil(() => !repo.IsRefreshing);
         var vm = repo.Histories;
         var pref = Preferences.Instance;
         var list = window.GetVisualDescendants().OfType<Views.HistoriesCommitList>().Single();

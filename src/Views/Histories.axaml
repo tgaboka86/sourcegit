@@ -525,7 +525,7 @@
                 Opacity=".8"/>
         </Border>
 
-        <v:LoadingIcon Grid.Row="1" Width="48" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsLoading}"/>
+        <v:LoadingIcon Grid.Row="1" Width="48" Height="48" HorizontalAlignment="Center" VerticalAlignment="Center" IsVisible="{Binding IsInitialLoading}"/>
       </Grid>
     </Grid>
 
