@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
@@ -28,6 +29,7 @@ internal static class Program
     {
         CheckRemotes();
         Task.Run(CheckWorkflowAsync).GetAwaiter().GetResult();
+        Task.Run(CheckPersonalAccessTokenAsync).GetAwaiter().GetResult();
         var fixture = Path.Combine(Path.GetTempPath(), "sourcegit-pr-checks-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(fixture);
         try
@@ -43,6 +45,8 @@ internal static class Program
             }).GetAwaiter().GetResult();
             App.BuildAvaloniaApp().SetupWithoutStarting();
             App.SetLocale("en_US");
+            Check(Path.GetFullPath(SourceGit.Native.OS.BasicDirectories.ConfigDir) == Path.GetFullPath(fixture), "preferences stay inside the test fixture");
+            Preferences.Instance.SetCanModify();
             var git = new ProcessStartInfo("git") { WorkingDirectory = fixture, CreateNoWindow = true };
             git.ArgumentList.Add("init");
             git.ArgumentList.Add("-b");
@@ -51,6 +55,7 @@ internal static class Program
             CheckBranchMenus(fixture);
             CheckSignInFailure(fixture);
             CheckDialog(fixture, args.Contains("--render"));
+            CheckTokenDialog(fixture, args.Contains("--render"));
         }
         finally
         {
@@ -153,7 +158,7 @@ internal static class Program
     private static async Task<(CreationService Service, MemoryStore Store, Client Client, HttpClient Http)> ServiceAsync(FakeServer server, string localTip = null)
     {
         var http = new HttpClient(server);
-        var client = new Client(http, Address, _ => Task.FromResult("fixture-token"));
+        var client = new Client(http, Address, _ => Task.FromResult(new AuthenticationHeaderValue("Bearer", "fixture-token")));
         await client.ResolveAsync(CancellationToken.None);
         var store = new MemoryStore();
         return (new(client, store, _ => Task.FromResult(localTip)), store, client, http);
@@ -344,6 +349,127 @@ internal static class Program
         anotherAccount.Dispose();
     }
 
+    private static async Task CheckPersonalAccessTokenAsync()
+    {
+        const string token = "synthetic-pat-for-checks";
+        var keychain = new FakeKeychain();
+        using (var auth = await PersonalAccessTokenAuthentication.CreateAsync(Address.Organization, " " + token + " ", keychain))
+        {
+            var header = await auth.GetAuthorizationAsync(CancellationToken.None);
+            Check(header.Scheme == "Basic" && Encoding.UTF8.GetString(Convert.FromBase64String(header.Parameter)) == ":" + token, "PAT uses Basic with an empty username");
+            await auth.RememberAsync();
+            Check(keychain.Values.Count == 0, "unverified PAT is not persisted");
+            auth.SetIdentity(FakeServer.Reviewer());
+            await auth.RememberAsync();
+            Check(!auth.SessionOnly && keychain.Values.Count == 1, "verified PAT stored separately in credential store");
+            Check(auth.AccountId == "pat/" + ReviewerId, "PAT preferences keyed by authenticated account, not secret");
+        }
+        using (var restored = await PersonalAccessTokenAuthentication.CreateAsync(Address.Organization.ToUpperInvariant(), "", keychain))
+        {
+            Check(restored.HasCredentials && !restored.SessionOnly, "restore saved PAT for the same organization");
+            keychain.FailErase = true;
+            try { await restored.SignOutAsync(); throw new Exception("Expected removal failure"); }
+            catch (ServiceException ex) { Check(ex.Code == "CredentialRemovalFailed" && restored.HasCredentials, "failed sign-out does not claim token removal"); }
+            keychain.FailErase = false;
+            await restored.SignOutAsync();
+            Check(!restored.HasCredentials && keychain.Values.Count == 0, "sign-out clears credential store and memory");
+        }
+        using (var auth = await PersonalAccessTokenAuthentication.CreateAsync(Address.Organization, token, keychain))
+        {
+            auth.SetIdentity(FakeServer.Reviewer());
+            keychain.FailStore = true;
+            await auth.RememberAsync();
+            Check(auth.SessionOnly && auth.HasCredentials && keychain.Values.Count == 0, "storage failure uses only session credentials");
+            keychain.FailStore = false;
+            await auth.RememberAsync();
+        }
+        using (var other = await PersonalAccessTokenAuthentication.CreateAsync("another-example-org", "", keychain))
+        {
+            Check(!other.HasCredentials, "PAT is not shared across organizations");
+            try { await other.GetAuthorizationAsync(CancellationToken.None); throw new Exception("Expected missing token"); }
+            catch (ServiceException ex) { Check(ex.Code == "PersonalAccessTokenRequired", "missing PAT asks for token without Microsoft login"); }
+        }
+        using (var invalid = await PersonalAccessTokenAuthentication.CreateAsync(Address.Organization, "invalid\r\ntoken", null))
+        {
+            try { await invalid.GetAuthorizationAsync(CancellationToken.None); throw new Exception("Expected malformed token"); }
+            catch (ServiceException ex) { Check(ex.Code == "PersonalAccessTokenRequired", "reject token with embedded whitespace"); }
+        }
+    }
+
+    private static void CheckTokenDialog(string fixture, bool render)
+    {
+        const string token = "synthetic-pat-for-checks";
+        var previous = Preferences.Instance.AzureDevOpsConnection;
+        Preferences.Instance.AzureDevOpsConnection = new ConnectionSettings { UsePersonalAccessToken = true };
+        var repo = new Repository(false, fixture, Path.Combine(fixture, ".git"));
+        var remote = new SourceGit.Models.Remote { Name = "origin", URL = Address.WebUrl };
+        var branch = new SourceGit.Models.Branch { Name = "feature/widgets", FullName = "refs/remotes/origin/feature/widgets", Remote = "origin" };
+        var keychain = new FakeKeychain();
+        var server = new FakeServer { ExpectedAuthorization = "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes(":" + token)) };
+        CreatePullRequest CreateModel() => new(repo, remote, branch, http: new HttpClient(server, false),
+            authenticationFactory: (_, _) => throw new Exception("PAT must not initialize MSAL"),
+            personalAccessTokenFactory: (org, value) => PersonalAccessTokenAuthentication.CreateAsync(org, value, keychain));
+        using var model = CreateModel();
+        model.PersonalAccessToken = token;
+        var window = new SourceGit.Views.CreatePullRequest { DataContext = model, ShowInTaskbar = false, ShowActivated = false };
+        window.Show();
+        PumpUntil(() => !model.IsBusy);
+        Check(model.IsConnected && model.IsSignedIn && model.AccountName == "Example reviewer" && !model.SessionOnly, "PAT connects without application ID or tenant setup: " + model.Error);
+        Check(model.PersonalAccessToken.Length == 0, "PAT field cleared after connecting");
+        Check(window.GetVisualDescendants().OfType<TextBox>().Any(x => x.PasswordChar != '\0'), "PAT input uses password masking");
+        Check(server.Posts == 0 && server.Patches == 0, "PAT connection only performs reads");
+        Check(!File.ReadAllText(Path.Combine(fixture, "preference.json")).Contains(token), "PAT is absent from ordinary preferences");
+        if (render)
+        {
+            model.ConnectionExpanded = true;
+            model.PersonalAccessToken = token;
+            foreach (var theme in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+            {
+                App.Current.RequestedThemeVariant = theme;
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                using var bitmap = new RenderTargetBitmap(new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height), new Vector(96, 96));
+                bitmap.Render(window);
+                bitmap.Save(Path.Combine(AppContext.BaseDirectory, "create-pr-token-" + theme.Key + ".png"));
+            }
+            model.PersonalAccessToken = string.Empty;
+        }
+        model.Target = model.Branches.Single(x => x.Name == Target);
+        model.AutoComplete = true;
+        model.SelectedSearchResult = FakeServer.Reviewer();
+        model.AddReviewer();
+        var submit = model.SubmitAsync();
+        PumpUntil(() => submit.IsCompleted);
+        Check(model.IsFinished && model.HasResultLink && string.IsNullOrEmpty(model.Error), "PAT creates PR, resolves reviewers, and verifies completion settings");
+        Check(!File.ReadAllText(Path.Combine(fixture, ".git", "sourcegit.settings")).Contains(token), "PAT absent from repository defaults and recovery journal");
+        using var restored = CreateModel();
+        var initialize = restored.InitializeAsync();
+        PumpUntil(() => initialize.IsCompleted);
+        Check(restored.IsConnected && restored.Target?.Name == Target && restored.AutoComplete, "PAT reconnect restores account-specific PR defaults");
+        server.AccountId = "66666666-6666-6666-6666-666666666666";
+        using var other = CreateModel();
+        initialize = other.InitializeAsync();
+        PumpUntil(() => initialize.IsCompleted);
+        Check(other.IsConnected && other.Target == null && other.Reviewers.Count == 0, "a different PAT account does not inherit defaults");
+        server.RepositoryError = HttpStatusCode.Unauthorized;
+        var retry = other.SignInAsync();
+        PumpUntil(() => retry.IsCompleted);
+        Check(!other.IsConnected && other.ConnectionExpanded && other.Error.Contains("expired") && !other.Error.Contains("tenant"), "PAT rejection explains token permissions without Entra setup advice");
+        Check(!other.Error.Contains(token), "connection error does not expose the PAT");
+        server.RepositoryError = null;
+        keychain.FailStore = true;
+        retry = other.RefreshAsync();
+        PumpUntil(() => retry.IsCompleted);
+        Check(other.IsConnected && other.SessionOnly, "repository retry reuses session PAT after secure-store failure");
+        var signOut = other.SignOutAsync();
+        PumpUntil(() => signOut.IsCompleted);
+        Check(!other.IsConnected && !other.HasAccount && keychain.Values.Count == 0, "dialog sign-out forgets stored PAT");
+        restored.AuthenticationMethod = 0;
+        Check(!restored.IsConnected && !restored.HasAccount && restored.Branches.Count == 0, "switching login method invalidates old connection");
+        window.Close();
+        Preferences.Instance.AzureDevOpsConnection = previous;
+    }
+
     private static async Task ExpectCodeAsync(Func<Task<CreationResult>> operation, string code)
     {
         try { await operation(); throw new Exception("Expected " + code); }
@@ -379,10 +505,28 @@ internal static class Program
         public string UserName => "reviewer@example.invalid";
         public string TenantId => "88888888-8888-8888-8888-888888888888";
         public bool SessionOnly => true;
+        public bool HasCredentials => true;
         public Task SignInAsync(CancellationToken token) { SignIns++; return Task.CompletedTask; }
         public Task SignOutAsync() => Task.CompletedTask;
-        public Task<string> GetTokenAsync(CancellationToken token) => Task.FromResult("fixture-token");
+        public Task<AuthenticationHeaderValue> GetAuthorizationAsync(CancellationToken token) => Task.FromResult(new AuthenticationHeaderValue("Bearer", "fixture-token"));
         public void Dispose() { }
+    }
+
+    private sealed class FakeKeychain : SourceGit.Native.OS.IKeychain
+    {
+        public Dictionary<string, string> Values { get; } = [];
+        public bool FailStore, FailErase;
+        public void Store(string host, string username, string password)
+        {
+            if (FailStore) throw new IOException("Synthetic credential-store failure");
+            Values[host + "/" + username] = password;
+        }
+        public string Read(string host, string username) => Values.GetValueOrDefault(host + "/" + username);
+        public void Erase(string host, string username)
+        {
+            if (FailErase) throw new IOException("Synthetic credential-store failure");
+            Values.Remove(host + "/" + username);
+        }
     }
 
     private sealed class FakeServer : HttpMessageHandler
@@ -391,6 +535,8 @@ internal static class Program
         public bool SourceMissing, IgnoreRequiredAtCreation, FailPatchOnce, LoseCreateResponse, MoveSourceAfterCreate, RejectCreate;
         public HttpStatusCode? RepositoryError;
         public string ExpectedTenant;
+        public string ExpectedAuthorization = "Bearer fixture-token";
+        public string AccountId = ReviewerId;
         public bool SuppressedAuthRedirects;
         public int Posts, Patches, ReviewerWrites;
         public PullRequest Current;
@@ -399,11 +545,17 @@ internal static class Program
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            Check(request.Headers.Authorization?.Parameter == "fixture-token", "authenticated request");
+            Check(request.Headers.Authorization?.ToString() == ExpectedAuthorization, "authenticated request");
             var path = request.RequestUri.AbsolutePath;
             var query = HttpUtility.ParseQueryString(request.RequestUri.Query);
             SuppressedAuthRedirects = request.Headers.TryGetValues("X-TFS-FedAuthRedirect", out var fedAuth) && fedAuth.Single() == "Suppress" &&
                 request.Headers.TryGetValues("X-VSS-ReauthenticationAction", out var reauthentication) && reauthentication.Single() == "Suppress";
+            if (path.EndsWith("/connectionData"))
+            {
+                var identity = Reviewer();
+                identity.Id = AccountId;
+                return Json(new ConnectionData { AuthenticatedUser = identity }, ApiJsonContext.Default.ConnectionData);
+            }
             if (path.EndsWith("/identities"))
                 return Json(new ListResult<Identity> { Value = [Reviewer()] }, ApiJsonContext.Default.ListResultIdentity);
             if (path.EndsWith("/refs"))

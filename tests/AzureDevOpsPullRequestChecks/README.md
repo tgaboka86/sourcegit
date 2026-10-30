@@ -6,6 +6,8 @@ The HTTP handler and authentication provider are synthetic. The checks use a tem
 
 Sign-in regression cases distinguish successful Microsoft authentication from a denied repository request, verify tenant-mismatch explanations and API redirect suppression, and ensure retrying repository loading does not start another interactive sign-in or perform any writes.
 
+PAT regression cases cover Basic authentication, masked input, account identification, organization-isolated credential storage, reconnection, storage failures, sign-out failures, expiration/permission errors, and PR creation with reviewers and auto-complete. They verify that synthetic secrets are absent from ordinary preferences and repository settings. Credential storage is injected; tests do not access real saved PATs. `--render` also saves light and dark images of the PAT connection panel.
+
 Build into a separate output directory to avoid locking a running SourceGit installation:
 
 ```powershell
@@ -15,4 +17,4 @@ dotnet build tests/AzureDevOpsPullRequestChecks/AzureDevOpsPullRequestChecks.csp
 
 On other platforms run the produced executable or use `dotnet` with its DLL. The checks require a desktop environment for Avalonia. `--render` saves light and dark native dialog images beside the executable. Fixture contents are removed when the checks finish.
 
-Also validate the ordinary Release build and a NativeAOT publish. A live sign-in and creation check requires a separately configured application registration and an explicitly designated disposable Azure DevOps repository; do not use production repositories for automated checks.
+Also validate the ordinary Release build and a NativeAOT publish. A live sign-in and creation check requires a separately configured application registration or PAT and an explicitly designated disposable Azure DevOps repository; do not use production repositories for automated checks.

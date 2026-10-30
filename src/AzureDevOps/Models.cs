@@ -6,9 +6,15 @@ namespace SourceGit.AzureDevOps
 {
     public sealed class ConnectionSettings
     {
+        public bool UsePersonalAccessToken { get; set; }
         public string ClientId { get; set; } = string.Empty;
         public string Tenant { get; set; } = "organizations";
         public string AccountId { get; set; } = string.Empty;
+    }
+
+    public sealed class ConnectionData
+    {
+        public Identity AuthenticatedUser { get; set; }
     }
 
     public sealed class PullRequestDefaults

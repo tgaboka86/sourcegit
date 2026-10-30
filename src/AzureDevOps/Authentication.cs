@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -18,8 +19,9 @@ namespace SourceGit.AzureDevOps
         string UserName { get; }
         string TenantId { get; }
         bool SessionOnly { get; }
+        bool HasCredentials { get; }
         Task SignInAsync(CancellationToken cancellationToken);
-        Task<string> GetTokenAsync(CancellationToken cancellationToken);
+        Task<AuthenticationHeaderValue> GetAuthorizationAsync(CancellationToken cancellationToken);
         Task SignOutAsync();
     }
 
@@ -29,6 +31,7 @@ namespace SourceGit.AzureDevOps
         public string UserName => _account?.Username ?? string.Empty;
         public string TenantId { get; private set; } = string.Empty;
         public bool SessionOnly { get; private set; }
+        public bool HasCredentials => _account != null;
 
         public static async Task<Authentication> CreateAsync(ConnectionSettings settings, string configDirectory)
         {
@@ -87,6 +90,9 @@ namespace SourceGit.AzureDevOps
                 throw new ServiceException("SignInRequired");
             }
         }
+
+        public async Task<AuthenticationHeaderValue> GetAuthorizationAsync(CancellationToken cancellationToken) =>
+            new("Bearer", await GetTokenAsync(cancellationToken).ConfigureAwait(false));
 
         public async Task SignOutAsync()
         {

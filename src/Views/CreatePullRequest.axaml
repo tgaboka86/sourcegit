@@ -24,13 +24,22 @@
         <TextBlock Text="{Binding RepositoryLabel}" Classes="bold" TextWrapping="Wrap"/>
         <Expander Header="{DynamicResource Text.CreatePR.Connection}" IsExpanded="{Binding ConnectionExpanded, Mode=TwoWay}" HorizontalAlignment="Stretch" IsEnabled="{Binding !IsBusy}">
           <StackPanel Spacing="8" Margin="0,8,0,0">
-            <TextBlock Text="{DynamicResource Text.CreatePR.ConnectionHelp}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.FG2}"/>
-            <TextBlock Text="{DynamicResource Text.CreatePR.ClientId}"/>
-            <TextBox Text="{Binding ClientId, Mode=TwoWay}" Watermark="{DynamicResource Text.CreatePR.ClientIdHint}"/>
-            <TextBlock Text="{DynamicResource Text.CreatePR.Tenant}"/>
-            <TextBox Text="{Binding Tenant, Mode=TwoWay}"/>
+            <TextBlock Text="{DynamicResource Text.CreatePR.AuthenticationMethod}"/>
+            <ComboBox ItemsSource="{Binding AuthenticationMethods}" SelectedIndex="{Binding AuthenticationMethod, Mode=TwoWay}" HorizontalAlignment="Stretch"/>
+            <StackPanel IsVisible="{Binding !UsePersonalAccessToken}" Spacing="8">
+              <TextBlock Text="{DynamicResource Text.CreatePR.ConnectionHelp}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.FG2}"/>
+              <TextBlock Text="{DynamicResource Text.CreatePR.ClientId}"/>
+              <TextBox Text="{Binding ClientId, Mode=TwoWay}" Watermark="{DynamicResource Text.CreatePR.ClientIdHint}"/>
+              <TextBlock Text="{DynamicResource Text.CreatePR.Tenant}"/>
+              <TextBox Text="{Binding Tenant, Mode=TwoWay}"/>
+            </StackPanel>
+            <StackPanel IsVisible="{Binding UsePersonalAccessToken}" Spacing="8">
+              <TextBlock Text="{DynamicResource Text.CreatePR.TokenHelp}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.FG2}"/>
+              <TextBox Text="{Binding PersonalAccessToken, Mode=TwoWay}" PasswordChar="●" MaxLength="1024" Watermark="{DynamicResource Text.CreatePR.TokenHint}"/>
+              <TextBlock Text="{DynamicResource Text.CreatePR.TokenStorage}" TextWrapping="Wrap" Foreground="{DynamicResource Brush.FG2}"/>
+            </StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="8">
-              <Button Classes="flat primary" Content="{DynamicResource Text.CreatePR.SignIn}" Click="OnSignIn"/>
+              <Button Classes="flat primary" Content="{Binding ConnectLabel}" Click="OnSignIn"/>
               <Button Classes="flat" Content="{DynamicResource Text.CreatePR.SignOut}" Click="OnSignOut" IsEnabled="{Binding HasAccount}"/>
             </StackPanel>
           </StackPanel>

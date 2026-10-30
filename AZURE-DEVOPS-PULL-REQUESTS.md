@@ -8,7 +8,23 @@ Push the source branch through the ordinary Git workflow first. SourceGit checks
 
 ## Connect an account
 
-This integration uses Microsoft Entra work or school accounts and a public-client application registration. No organization, tenant, application ID, or reviewer is built into SourceGit. A maintainer or administrator needs to provide an application registration that the account is allowed to use.
+Choose **Microsoft sign-in** or **Personal access token (PAT)** under **Azure DevOps connection**. No organization, tenant, application ID, token, or reviewer is built into SourceGit.
+
+### Personal access token
+
+An existing organization-scoped PAT can connect without a Microsoft Entra application registration or that application's consent. The token remains subject to its expiration, organization policies, and the owner's permissions.
+
+1. Use a PAT for the repository's organization with **Code (Read & write)** for PR operations and **Identity (Read)** for reviewer lookup. Full access is not required.
+2. Choose **Personal access token (PAT)**, paste it into the masked token field, and select **Connect with token**. No application ID or tenant ID is needed.
+3. SourceGit checks the authenticated account and repository access using read-only requests. After successful validation it saves the PAT in the operating system credential store, separately for each organization. Later dialogs can reuse it; paste a new token to replace it.
+
+The PAT is never written to ordinary preferences, Git configuration, repository settings, or the recovery journal. When secure storage fails, the current dialog can continue using the token in memory and displays a session-only notice. **Sign out** removes the saved PAT from this computer; it does not revoke the PAT in Azure DevOps. Git credentials are not imported or changed. Successful PR defaults are isolated by the authenticated Azure DevOps account, including when a token is rotated. Microsoft sign-in and PAT defaults are kept separately.
+
+If the token is rejected, check its organization, expiration, scopes, and the account's repository access. Replace an expired token in the connection panel. See Microsoft's [PAT guidance](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate), [PR API permissions](https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-requests/create?view=azure-devops-rest-7.1), and [identity lookup permissions](https://learn.microsoft.com/en-us/rest/api/azure/devops/ims/identities/read-identities?view=azure-devops-rest-7.1).
+
+### Microsoft sign-in
+
+Microsoft sign-in uses Entra work or school accounts and a public-client application registration. A maintainer or administrator needs to provide a registration that the account is allowed to use.
 
 1. Register an application in Microsoft Entra ID with the supported organizational account types required for your deployment.
 2. Add the **Mobile and desktop applications** platform with the `http://localhost` redirect URI used by the system browser.
@@ -46,6 +62,6 @@ The server remains authoritative for permissions, branch policies, conflicts, an
 
 ## Supported scope
 
-Modern Azure DevOps HTTPS and SSH URLs and legacy `visualstudio.com` HTTPS URLs are supported. Fetch and push URLs identifying different repositories are rejected with an explanation; select the intended remote explicitly. Azure DevOps Server/on-premises, personal Microsoft accounts, and cross-repository fork PRs are not supported by this dialog.
+Modern Azure DevOps HTTPS and SSH URLs and legacy `visualstudio.com` HTTPS URLs are supported. Fetch and push URLs identifying different repositories are rejected with an explanation; select the intended remote explicitly. Azure DevOps Server/on-premises and cross-repository fork PRs are not supported by this dialog. Interactive Microsoft sign-in supports work or school accounts.
 
-The integration uses Azure DevOps REST API 7.1 and source-generated JSON models. Authentication uses MSAL. Build and test it with the normal SourceGit .NET/Avalonia toolchain, including a Release NativeAOT publish. The regression checks in `tests/AzureDevOpsPullRequestChecks` use synthetic repositories, a fake HTTP server, and injected authentication. They do not send real PRs or notify reviewers.
+The integration uses Azure DevOps REST API 7.1 and source-generated JSON models. Microsoft authentication uses MSAL; PAT authentication uses an HTTPS Basic header. The organization connection-data endpoint identifies the PAT account. Redirects remain disabled for both methods. Build and test it with the normal SourceGit .NET/Avalonia toolchain, including a Release NativeAOT publish. The regression checks in `tests/AzureDevOpsPullRequestChecks` use synthetic repositories, a fake HTTP server, and injected authentication and credential storage. They do not send real PRs or notify reviewers.

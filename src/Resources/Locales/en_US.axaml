@@ -1,6 +1,18 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <x:String x:Key="Text.CreatePR.Title">Create pull request</x:String>
   <x:String x:Key="Text.CreatePR.Connection">Azure DevOps connection</x:String>
+  <x:String x:Key="Text.CreatePR.AuthenticationMethod">Authentication method</x:String>
+  <x:String x:Key="Text.CreatePR.MicrosoftAccount">Microsoft sign-in</x:String>
+  <x:String x:Key="Text.CreatePR.PersonalAccessToken">Personal access token (PAT)</x:String>
+  <x:String x:Key="Text.CreatePR.ConnectToken">Connect with token</x:String>
+  <x:String x:Key="Text.CreatePR.ConnectingToken">Connecting with your personal access token…</x:String>
+  <x:String x:Key="Text.CreatePR.TokenHelp">Use a token for this organization with Code (Read &amp; write) and Identity (Read) scopes. No application ID or tenant ID is needed.</x:String>
+  <x:String x:Key="Text.CreatePR.TokenHint">Paste a PAT, or leave empty to reuse the saved token</x:String>
+  <x:String x:Key="Text.CreatePR.TokenStorage">After connecting, the token is stored in your system credential store for this organization. Sign out removes the saved token from this computer.</x:String>
+  <x:String x:Key="Text.CreatePR.TokenRepositoryLoadFailed">The token was authenticated, but Azure DevOps repository data could not be loaded.</x:String>
+  <x:String x:Key="Text.CreatePR.Error.PersonalAccessTokenRequired">Enter a personal access token in connection settings.</x:String>
+  <x:String x:Key="Text.CreatePR.Error.PersonalAccessTokenRejected">Check that the token is valid, has not expired, belongs to this organization, and has Code (Read &amp; write) and Identity (Read) scopes. Your account must also have access to the requested resource.</x:String>
+  <x:String x:Key="Text.CreatePR.Error.CredentialRemovalFailed">The saved token could not be removed from the system credential store. Unlock the store and try signing out again.</x:String>
   <x:String x:Key="Text.CreatePR.ConnectionHelp">Configure a Microsoft Entra public-client application for Azure DevOps, with the http://localhost desktop redirect URI. These settings are stored only on this computer.</x:String>
   <x:String x:Key="Text.CreatePR.ClientId">Application (client) ID</x:String>
   <x:String x:Key="Text.CreatePR.ClientIdHint">Public-client application ID</x:String>

@@ -31,12 +31,35 @@ namespace SourceGit.ViewModels
         public string RepositoryLabel { get => _repositoryLabel; private set => SetProperty(ref _repositoryLabel, value); }
         public string ClientId { get => _clientId; set => SetProperty(ref _clientId, value); }
         public string Tenant { get => _tenant; set => SetProperty(ref _tenant, value); }
+        public string[] AuthenticationMethods { get; } = [App.Text("CreatePR.MicrosoftAccount"), App.Text("CreatePR.PersonalAccessToken")];
+        public int AuthenticationMethod
+        {
+            get => _authenticationMethod;
+            set
+            {
+                if (IsBusy || !SetProperty(ref _authenticationMethod, value))
+                    return;
+                _auth?.Dispose();
+                _auth = null;
+                PersonalAccessToken = string.Empty;
+                ResetConnection();
+                SessionOnly = false;
+                Error = string.Empty;
+                Status = App.Text("CreatePR.ConnectPrompt");
+                OnPropertyChanged(nameof(UsePersonalAccessToken));
+                OnPropertyChanged(nameof(ConnectLabel));
+                ConnectionExpanded = true;
+            }
+        }
+        public bool UsePersonalAccessToken => AuthenticationMethod == 1;
+        public string ConnectLabel => App.Text(UsePersonalAccessToken ? "CreatePR.ConnectToken" : "CreatePR.SignIn");
+        public string PersonalAccessToken { get => _personalAccessToken; set => SetProperty(ref _personalAccessToken, value); }
         public bool ConnectionExpanded { get => _connectionExpanded; set => SetProperty(ref _connectionExpanded, value); }
         public string AccountName { get => _accountName; private set => SetProperty(ref _accountName, value); }
         public bool SessionOnly { get => _sessionOnly; private set => SetProperty(ref _sessionOnly, value); }
         public bool IsConnected { get => _connected; private set { SetProperty(ref _connected, value); NotifyState(); } }
         public bool IsSignedIn { get => _signedIn; private set { SetProperty(ref _signedIn, value); NotifyState(); } }
-        public bool HasAccount => !string.IsNullOrEmpty(_auth?.AccountId);
+        public bool HasAccount => _auth?.HasCredentials == true;
         public string RefreshLabel => App.Text(IsConnected ? "CreatePR.Refresh" : "CreatePR.RetryConnection");
         public bool IsBusy { get => _busy; private set { SetProperty(ref _busy, value); NotifyState(); } }
         public bool CanEdit => IsConnected && !IsBusy && !IsFinished && _store?.Pending == null;
@@ -79,7 +102,8 @@ namespace SourceGit.ViewModels
         public string SearchText { get => _searchText; set { if (SetProperty(ref _searchText, value)) _ = SearchAsync(value); } }
 
         public CreatePullRequest(Repository repository, Models.Remote remote, Models.Branch branch, Models.Branch localBranch = null,
-            HttpClient http = null, Func<ConnectionSettings, string, Task<IAuthentication>> authenticationFactory = null)
+            HttpClient http = null, Func<ConnectionSettings, string, Task<IAuthentication>> authenticationFactory = null,
+            Func<string, string, Task<PersonalAccessTokenAuthentication>> personalAccessTokenFactory = null)
         {
             _repo = repository;
             _remote = remote;
@@ -93,21 +117,22 @@ namespace SourceGit.ViewModels
             var settings = Preferences.Instance.AzureDevOpsConnection ?? new ConnectionSettings();
             _clientId = settings.ClientId;
             _tenant = settings.Tenant;
-            _connectionExpanded = string.IsNullOrWhiteSpace(_clientId);
+            _authenticationMethod = settings.UsePersonalAccessToken ? 1 : 0;
+            _connectionExpanded = UsePersonalAccessToken || string.IsNullOrWhiteSpace(_clientId);
             _http = http ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(30) };
             _authenticationFactory = authenticationFactory ?? (async (settings, directory) => await Authentication.CreateAsync(settings, directory));
+            _personalAccessTokenFactory = personalAccessTokenFactory ?? ((organization, token) => PersonalAccessTokenAuthentication.CreateAsync(organization, token, Native.OS.Keychain));
             Status = App.Text("CreatePR.ConnectPrompt");
         }
 
-        public Task InitializeAsync() => string.IsNullOrWhiteSpace(ClientId) ? Task.CompletedTask : ConnectAsync(false);
+        public Task InitializeAsync() => !UsePersonalAccessToken && string.IsNullOrWhiteSpace(ClientId) ? Task.CompletedTask : ConnectAsync(false);
         public Task SignInAsync() => ConnectAsync(true);
 
-        private Task ConnectAsync(bool interactive) => RunAsync(async () =>
+        private void ResetConnection()
         {
             IsConnected = false;
             IsSignedIn = false;
             AccountName = string.Empty;
-            Status = App.Text(interactive ? "CreatePR.SigningIn" : "CreatePR.RestoringSignIn");
             _sourceValid = false;
             _result = null;
             IsFinished = false;
@@ -116,27 +141,54 @@ namespace SourceGit.ViewModels
             Branches.Clear();
             SearchResults.Clear();
             _searchCancellation?.Cancel();
+            Target = null;
+            _client = null;
+            _service = null;
+            NotifyState();
+        }
+
+        private Task ConnectAsync(bool interactive) => RunAsync(async () =>
+        {
+            ResetConnection();
+            Status = App.Text(UsePersonalAccessToken ? "CreatePR.ConnectingToken" : interactive ? "CreatePR.SigningIn" : "CreatePR.RestoringSignIn");
             if (_address == null)
                 throw new ServiceException("UnsupportedRemote");
             if (!string.IsNullOrEmpty(_remote.PushURL) && (!RemoteAddress.TryParse(_remote.PushURL, out var push) || push.Key != _address.Key))
                 throw new ServiceException("AmbiguousRemote");
 
-            var settings = new ConnectionSettings { ClientId = ClientId?.Trim(), Tenant = Tenant?.Trim(), AccountId = Preferences.Instance.AzureDevOpsConnection?.AccountId };
-            _auth?.Dispose();
-            _auth = await _authenticationFactory(settings, Native.OS.BasicDirectories.ConfigDir);
-            if (interactive)
-                await _auth.SignInAsync(_lifetime.Token);
-            await _auth.GetTokenAsync(_lifetime.Token);
-            IsSignedIn = true;
-            AccountName = _auth.UserName;
-            SessionOnly = _auth.SessionOnly;
-            ConnectionExpanded = false;
-            settings.AccountId = _auth.AccountId;
+            var settings = new ConnectionSettings { UsePersonalAccessToken = UsePersonalAccessToken, ClientId = ClientId?.Trim(), Tenant = Tenant?.Trim(), AccountId = Preferences.Instance.AzureDevOpsConnection?.AccountId };
+            if (UsePersonalAccessToken)
+            {
+                if (_auth is not PersonalAccessTokenAuthentication || !string.IsNullOrWhiteSpace(PersonalAccessToken))
+                {
+                    _auth?.Dispose();
+                    try { _auth = await _personalAccessTokenFactory(_address.Organization, PersonalAccessToken); }
+                    finally { PersonalAccessToken = string.Empty; }
+                }
+            }
+            else
+            {
+                _auth?.Dispose();
+                _auth = await _authenticationFactory(settings, Native.OS.BasicDirectories.ConfigDir);
+                if (interactive)
+                    await _auth.SignInAsync(_lifetime.Token);
+            }
+            await _auth.GetAuthorizationAsync(_lifetime.Token);
+            _client = new Client(_http, _address, _auth.GetAuthorizationAsync);
+            if (_auth is PersonalAccessTokenAuthentication tokenAuth)
+                tokenAuth.SetIdentity(await _client.GetAuthenticatedUserAsync(_lifetime.Token));
+            UpdateAccount();
+            if (!UsePersonalAccessToken)
+                settings.AccountId = _auth.AccountId;
             Preferences.Instance.AzureDevOpsConnection = settings;
             Preferences.Instance.Save();
-            _client = new Client(_http, _address, _auth.GetTokenAsync);
             Status = App.Text("CreatePR.LoadingRepository");
             var info = await _client.ResolveAsync(_lifetime.Token);
+            if (_auth is PersonalAccessTokenAuthentication verifiedToken)
+            {
+                await verifiedToken.RememberAsync();
+                UpdateAccount();
+            }
             RepositoryLabel = $"{_address.Organization} / {info.Project.Name} / {info.Name}";
             _preferenceKey = _client.PreferenceKey(_auth.AccountId);
             _store = new RepositoryCreationStore(_repo.Settings, _preferenceKey + "/" + _sourceRef);
@@ -181,6 +233,14 @@ namespace SourceGit.ViewModels
             }
         });
 
+        private void UpdateAccount()
+        {
+            IsSignedIn = true;
+            AccountName = _auth.UserName;
+            SessionOnly = _auth.SessionOnly;
+            ConnectionExpanded = false;
+        }
+
         public Task RefreshAsync() => !IsConnected ? ConnectAsync(false) : RunAsync(async () =>
         {
             if (_client == null)
@@ -194,16 +254,13 @@ namespace SourceGit.ViewModels
         {
             if (_auth != null)
                 await _auth.SignOutAsync();
-            IsConnected = false;
-            IsSignedIn = false;
-            AccountName = string.Empty;
-            Reviewers.Clear();
-            Branches.Clear();
-            SearchResults.Clear();
-            _store = null;
-            _result = null;
-            _searchCancellation?.Cancel();
-            Preferences.Instance.AzureDevOpsConnection.AccountId = string.Empty;
+            _auth?.Dispose();
+            _auth = null;
+            PersonalAccessToken = string.Empty;
+            SessionOnly = false;
+            ResetConnection();
+            if (!UsePersonalAccessToken)
+                Preferences.Instance.AzureDevOpsConnection.AccountId = string.Empty;
             Preferences.Instance.Save();
             ConnectionExpanded = true;
             Status = App.Text("CreatePR.ConnectPrompt");
@@ -352,9 +409,10 @@ namespace SourceGit.ViewModels
 
         private void ShowError(Exception ex)
         {
+            var tokenRejected = UsePersonalAccessToken && ex is ServiceException { Code: "Unauthorized" or "Forbidden" };
             var mismatchedTenant = ex is ServiceException { StatusCode: 401, ExpectedTenantId: not null } denied &&
                 Guid.TryParse(_auth?.TenantId, out var signedInTenant) && !denied.ExpectedTenantId.Equals(signedInTenant.ToString(), StringComparison.OrdinalIgnoreCase);
-            Error = mismatchedTenant ? App.Text("CreatePR.Error.TenantMismatch", ((ServiceException)ex).ExpectedTenantId, _auth.TenantId) :
+            Error = tokenRejected ? App.Text("CreatePR.Error.PersonalAccessTokenRejected") : mismatchedTenant ? App.Text("CreatePR.Error.TenantMismatch", ((ServiceException)ex).ExpectedTenantId, _auth.TenantId) :
                 App.Text("CreatePR.Error." + (ex is ServiceException service ? service.Code : ex is MsalException ? "Authentication" : "Connection"));
             if (ex is ServiceException { StatusCode: > 0 } response)
             {
@@ -362,10 +420,12 @@ namespace SourceGit.ViewModels
                 if (!mismatchedTenant && !string.IsNullOrWhiteSpace(response.ServerMessage))
                     Error += Environment.NewLine + response.ServerMessage;
             }
-            Status = App.Text(IsSignedIn && !IsConnected ? "CreatePR.RepositoryLoadFailed" : "CreatePR.RequestFailed");
+            Status = App.Text(IsSignedIn && !IsConnected ? UsePersonalAccessToken ? "CreatePR.TokenRepositoryLoadFailed" : "CreatePR.RepositoryLoadFailed" : "CreatePR.RequestFailed");
+            if (tokenRejected)
+                ConnectionExpanded = true;
             if (ex is ServiceException { Code: "SourceChanged" or "Unpublished" or "InvalidSource" })
                 _sourceValid = false;
-            if (ex is ServiceException { Code: "SignInRequired" or "ConnectionSetup" })
+            if (ex is ServiceException { Code: "SignInRequired" or "ConnectionSetup" or "PersonalAccessTokenRequired" })
             {
                 IsSignedIn = false;
                 ConnectionExpanded = true;
@@ -389,6 +449,8 @@ namespace SourceGit.ViewModels
 
         public void Dispose()
         {
+            if (_disposed)
+                return;
             _disposed = true;
             _lifetime.Cancel();
             _searchCancellation?.Cancel();
@@ -396,6 +458,7 @@ namespace SourceGit.ViewModels
             _http.Dispose();
             _lifetime.Dispose();
             _auth?.Dispose();
+            PersonalAccessToken = string.Empty;
         }
 
         private static readonly string[] StrategyValues = ["squash", "rebase", "noFastForward"];
@@ -408,6 +471,7 @@ namespace SourceGit.ViewModels
         private readonly CancellationTokenSource _lifetime = new();
         private CancellationTokenSource _searchCancellation;
         private readonly Func<ConnectionSettings, string, Task<IAuthentication>> _authenticationFactory;
+        private readonly Func<string, string, Task<PersonalAccessTokenAuthentication>> _personalAccessTokenFactory;
         private IAuthentication _auth;
         private Client _client;
         private RepositoryCreationStore _store;
@@ -417,6 +481,8 @@ namespace SourceGit.ViewModels
         private string _repositoryLabel;
         private string _clientId;
         private string _tenant;
+        private int _authenticationMethod;
+        private string _personalAccessToken = string.Empty;
         private string _accountName;
         private string _status;
         private string _error;

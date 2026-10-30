@@ -4,6 +4,7 @@ namespace SourceGit.AzureDevOps
 {
     [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
     [JsonSerializable(typeof(RepositoryInfo))]
+    [JsonSerializable(typeof(ConnectionData))]
     [JsonSerializable(typeof(ListResult<GitRef>))]
     [JsonSerializable(typeof(ListResult<Identity>))]
     [JsonSerializable(typeof(ListResult<PullRequest>))]

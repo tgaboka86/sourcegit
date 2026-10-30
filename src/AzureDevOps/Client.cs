@@ -12,10 +12,19 @@ using System.Threading.Tasks;
 
 namespace SourceGit.AzureDevOps
 {
-    public sealed class Client(HttpClient http, RemoteAddress address, Func<CancellationToken, Task<string>> acquireToken)
+    public sealed class Client(HttpClient http, RemoteAddress address, Func<CancellationToken, Task<AuthenticationHeaderValue>> acquireAuthorization)
     {
         public RemoteAddress Address { get; private set; } = address;
         public RepositoryInfo Repository { get; private set; }
+
+        public async Task<Identity> GetAuthenticatedUserAsync(CancellationToken cancellationToken)
+        {
+            using var response = await SendAsync(HttpMethod.Get, Address.OrganizationUrl + "/_apis/connectionData", null, cancellationToken, null).ConfigureAwait(false);
+            var data = await ReadAsync(response, ApiJsonContext.Default.ConnectionData, cancellationToken).ConfigureAwait(false);
+            if (!Guid.TryParse(data.AuthenticatedUser?.Id, out var id) || id == Guid.Empty || data.AuthenticatedUser.IsContainer)
+                throw new ServiceException("InvalidResponse");
+            return data.AuthenticatedUser;
+        }
 
         public async Task<RepositoryInfo> ResolveAsync(CancellationToken cancellationToken)
         {
@@ -154,15 +163,16 @@ namespace SourceGit.AzureDevOps
             catch (JsonException) { return null; }
         }
 
-        private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, string json, CancellationToken cancellationToken)
+        private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, string json, CancellationToken cancellationToken, string apiVersion = "7.1")
         {
             for (var attempt = 0; ; attempt++)
             {
-                using var request = new HttpRequestMessage(method, path + (path.Contains('?') ? "&" : "?") + "api-version=7.1");
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await acquireToken(cancellationToken).ConfigureAwait(false));
+                var url = apiVersion == null ? path : path + (path.Contains('?') ? "&" : "?") + "api-version=" + apiVersion;
+                using var request = new HttpRequestMessage(method, url);
+                request.Headers.Authorization = await acquireAuthorization(cancellationToken).ConfigureAwait(false);
                 request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
                 // Ask for an API error instead of an HTML federated sign-in redirect.
-                // Keep redirects disabled so bearer tokens cannot leave the selected services.
+                // Keep redirects disabled so credentials cannot leave the selected services.
                 request.Headers.TryAddWithoutValidation("X-TFS-FedAuthRedirect", "Suppress");
                 request.Headers.TryAddWithoutValidation("X-VSS-ReauthenticationAction", "Suppress");
                 if (json != null)
