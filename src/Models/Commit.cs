@@ -27,7 +27,11 @@ namespace SourceGit.Models
         public List<Decorator> GraphBranches { get; set; } = [];
 
         public bool IsMerged { get; set; } = false;
-        public int Color { get; set; } = 0;
+        public int Color
+        {
+            get => _color;
+            set => SetProperty(ref _color, value);
+        }
         public double LeftMargin
         {
             get => _leftMargin;
@@ -69,7 +73,7 @@ namespace SourceGit.Models
         {
             get
             {
-                var branches = Decorators.FindAll(x => x.IsBranch);
+                var branches = Decorators.FindAll(x => x.IsBranchOrHead);
                 return branches.Count > 0 ? string.Join("\n", branches.ConvertAll(x => x.Name)) : null;
             }
         }
@@ -162,6 +166,7 @@ namespace SourceGit.Models
             });
         }
 
+        private int _color = 0;
         private bool _isHighlightedInGraph = false;
     }
 
